@@ -68,7 +68,6 @@ def submit_crawl_job(args):
     # Initialize queue manager
     queue_host = args.queue_host
     queue_port = int(args.queue_port)
-    queue_manager = QueueManager(host=queue_host, port=queue_port)
 
     # Create job data with only defined parameters
     job_data = {
@@ -110,11 +109,21 @@ def submit_crawl_job(args):
     # Fill in missing parameters with defaults from .env
     job_data = get_job_params(job_data)
 
-    # Enqueue the full job data first to get job_id
+    # Logging specific to crawl job submission intent
+    target_for_log = job_data.get('domain', job_data.get('url', 'N/A'))
+    logger = logging.getLogger(__name__)
+    logger.info(f"Preparing to enqueue crawl job for {target_for_log}")
+
+    queue_manager = QueueManager(host=queue_host, port=queue_port)
+
+    # Enqueue the full job data
     job_id = queue_manager.enqueue_job(
         job_data=job_data,
         tube=args.tube,
-        priority=args.priority
+        priority=args.priority,
+        # ttr for crawl jobs? QueueManager.enqueue_job has a default ttr=60.
+        # If crawl jobs need a different TTR, it should be passed here.
+        ttr=getattr(args, 'ttr', 60)
     )
 
     # Insert or update job in MongoDB with crawl_status 'fresh' and job_id

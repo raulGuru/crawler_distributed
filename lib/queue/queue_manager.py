@@ -72,52 +72,33 @@ class QueueManager:
         Enqueue a job to the specified tube
 
         Args:
-            job_data (dict): Job data to enqueue
-            tube (str, optional): Tube name. If None, derive from job_type
+            job_data (dict): Job data to enqueue (assumed to be fully prepared by caller)
+            tube (str, optional): Tube name. If None, derive from job_type using DEFAULT_TUBES.
             priority (str/int, optional): Job priority ('high', 'normal', 'low' or numeric)
             delay (int, optional): Delay in seconds before job is ready
             ttr (int, optional): Time to run in seconds
 
         Returns:
-            int: Job ID
+            int: Job ID from Beanstalkd, or None if enqueueing failed before Beanstalkd operation.
         """
-        # If we're submitting just a crawl_id, ensure job_type is set
-        if 'crawl_id' in job_data and 'job_type' not in job_data:
-            job_data['job_type'] = 'crawl'
-
-        # Check if the job is a duplicate (same domain/URL with recent timestamp)
-        # This helps prevent job duplication issues
-        if job_data.get('job_type') == 'crawl':
-            domain = job_data.get('domain')
-            url = job_data.get('url')
-
-            if domain or url:
-                target = domain if domain else url
-                self.logger.info(f"Enqueueing job for {target}")
-
-                # Add timestamp if not present
-                if 'submitted_at' not in job_data:
-                    from datetime import datetime
-                    job_data['submitted_at'] = datetime.utcnow().isoformat()
-
-        # Determine tube from job_type if not specified
-        if tube is None:
+        current_tube = tube
+        if current_tube is None:
             job_type = job_data.get('job_type')
             if not job_type:
-                raise ValueError("Job data missing 'job_type' field and no tube specified")
-            tube = self._get_tube_for_job_type(job_type)
+                self.logger.error("Job data missing 'job_type' and no explicit 'tube' specified for enqueue_job.")
+                raise ValueError("Job data missing 'job_type' and no explicit 'tube' specified.")
+            current_tube = self._get_tube_for_job_type(job_type)
+            if current_tube == job_type:
+                self.logger.warning(f"No default tube configured for job_type '{job_type}'. Using job_type name as tube name: '{current_tube}'. Explicitly pass 'tube' to enqueue_job if this is not intended.")
 
-        # Get numeric priority
         numeric_priority = self._get_priority(priority)
 
         try:
-            # Serialize job data
             serialized_job_str = self.serializer.serialize_job(job_data)
             serialized_job_bytes = serialized_job_str.encode('utf-8')
 
-            # Use the tube
-            self.use_tube(tube)
-            # Put the job
+            self.use_tube(current_tube)
+
             job_id = self.client.put(
                 serialized_job_bytes,
                 priority=numeric_priority,
@@ -125,11 +106,11 @@ class QueueManager:
                 ttr=ttr
             )
 
-            self.logger.info(f"Enqueued job {job_id} to tube {tube} with priority {numeric_priority}")
+            self.logger.info(f"Enqueued job {job_id} to tube {current_tube} with priority {numeric_priority}, TTR {ttr}s, delay {delay}s.")
             return job_id
 
         except Exception as e:
-            self.logger.error(f"Failed to enqueue job to tube {tube}: {str(e)}")
+            self.logger.error(f"Failed to enqueue job to tube {current_tube}: {str(e)}")
             raise
 
     def dequeue_job(self, tubes=None, timeout=None):
@@ -189,31 +170,33 @@ class QueueManager:
             self.logger.error(f"Failed to dequeue job: {str(e)}")
             return None, None, None
 
-    def complete_job(self, job_data):
+    def complete_job(self, job_object, job_data_dict=None):
         """
-        Mark a job as completed (delete it)
+        Mark a job as completed (delete it).
 
         Args:
-            job_data (dict): Job data with _job attribute
+            job_object: The job object obtained from dequeue_job.
+            job_data_dict (dict, optional): The original deserialized job data dictionary, for logging or context.
         """
-        job = job_data.get('_job')
-        if not job:
-            self.logger.error("Cannot complete job: _job attribute missing")
+        if not job_object:
+            self.logger.error("Cannot complete job: job_object is missing")
             return
 
         try:
-            job_id = job.jid
-            self.delete_job(job) # Use the new direct delete_job method
+            job_id = job_object.id
+            self.delete_job(job_object)
             self.logger.info(f"Completed and deleted job {job_id} via complete_job.")
 
             # Also check for any zombie jobs with the same crawl_id
-            crawl_id = job_data.get('crawl_id')
-            if crawl_id:
+            if job_data_dict and job_data_dict.get('crawl_id'):
+                crawl_id = job_data_dict.get('crawl_id')
                 self.logger.info(f"Cleaning up any zombie jobs for crawl_id {crawl_id}")
                 self.purge_completed_jobs(crawl_id)
+            elif job_data_dict is None:
+                self.logger.debug("job_data_dict not provided to complete_job, skipping zombie job check for crawl_id.")
 
         except Exception as e:
-            self.logger.error(f"Failed to complete job {job.jid}: {str(e)}")
+            self.logger.error(f"Failed to complete job {getattr(job_object, 'id', 'unknown')}: {str(e)}")
 
     def purge_completed_jobs(self, crawl_id=None):
         """
@@ -270,81 +253,116 @@ class QueueManager:
         except Exception as e:
             self.logger.error(f"Failed to purge completed jobs: {str(e)}")
 
-    def retry_job(self, job_data, delay=30, priority=None):
+    def retry_job(self, job_object, job_data_dict, delay=30, priority_str_or_int=None):
         """
         Retry a job (release it back to the queue), but only up to 3 times.
-        After 3 failed attempts, mark as failed in the database and do not retry.
+        After 3 failed attempts, bury the job.
+        Note: Beanstalkd 'release' does not modify the job body in the queue.
+              The 'retries' count in job_data_dict is an in-memory update for logging/logic.
+
+        Args:
+            job_object: The job object obtained from dequeue_job.
+            job_data_dict (dict): The deserialized job data dictionary.
+            delay (int, optional): Delay in seconds before job is ready again.
+            priority_str_or_int (str/int, optional): Job priority for re-queue.
         """
-        job = job_data.get('_job')
-        if not job:
-            self.logger.error("Cannot retry job: _job attribute missing")
+        if not job_object:
+            self.logger.error("Cannot retry job: job_object is missing")
+            return
+        if job_data_dict is None:
+            self.logger.error("Cannot retry job: job_data_dict is missing (needed for retry count)")
             return
 
-        # Use current priority if not specified
-        if priority is None:
-            priority = job.stats().get('pri', self.DEFAULT_PRIORITIES['normal'])
-        else:
-            priority = self._get_priority(priority)
+        job_id = job_object.id
+
+        # Use current priority if not specified, by peeking job stats from the object
+        current_priority_from_stats = job_object.stats().get('pri', self.DEFAULT_PRIORITIES['normal'])
+        numeric_priority = self._get_priority(priority_str_or_int if priority_str_or_int is not None else current_priority_from_stats)
 
         # Track retries
-        retries = job_data.get('retries', 0) + 1
-        job_data['retries'] = retries
-        crawl_id = job_data.get('crawl_id')
+        retries = job_data_dict.get('retries', 0) + 1
+        job_data_dict['retries'] = retries
 
         if retries > 3:
-            # Mark as failed in DB and bury the job
-            self.logger.error(f"Job {job.jid} exceeded max retries (3). Marking as failed.")
+            self.logger.error(f"Job {job_id} (crawl_id: {job_data_dict.get('crawl_id', 'N/A')}) exceeded max retries ({retries-1}). Burying job.")
             try:
-                # Bury the job in the queue
-                self.client.bury(job)
-                self.logger.info(f"Buried job {job.jid} after max retries.")
+                self.client.bury(job_object)
+                self.logger.info(f"Buried job {job_id} after max retries.")
             except Exception as e:
-                self.logger.error(f"Error marking job as failed in DB: {str(e)}")
+                self.logger.error(f"Error burying job {job_id} after max retries: {str(e)}")
             return
 
         try:
-            job_id = job.jid
-            self.client.release(job, priority=priority, delay=delay)
-            self.logger.info(f"Released job {job_id} for retry with delay {delay}s and priority {priority} (retry {retries})")
+            self.client.release(job_object, priority=numeric_priority, delay=delay)
+            self.logger.info(
+                f"Released job {job_id} (crawl_id: {job_data_dict.get('crawl_id', 'N/A')}) for retry {retries} "
+                f"with delay {delay}s and priority {numeric_priority}."
+            )
         except Exception as e:
-            self.logger.error(f"Failed to retry job {job.jid}: {str(e)}")
+            self.logger.error(f"Failed to retry/release job {job_id}: {str(e)}")
 
-    def fail_job(self, job_data, permanent=False):
+    def fail_job(self, job_object, job_data_dict, permanent=False):
         """
-        Mark a job as failed, with retry limit logic.
+        Mark a job as failed.
+        If not permanent and retries < max_retries, it re-queues the job with a delay.
+        Otherwise, it buries the job.
+
+        Args:
+            job_object: The job object obtained from dequeue_job.
+            job_data_dict (dict): The deserialized job data dictionary.
+            permanent (bool, optional): If True, bury immediately. Defaults to False.
         """
-        job = job_data.get('_job')
-        if not job:
-            self.logger.error("Cannot fail job: _job attribute missing")
+        if not job_object:
+            self.logger.error("Cannot fail job: job_object is missing")
+            return
+        if job_data_dict is None:
+            self.logger.error("Cannot fail job: job_data_dict is missing (needed for retry count and re-queueing)")
             return
 
-        retries = job_data.get('retries', 0) + 1
-        job_data['retries'] = retries
-        crawl_id = job_data.get('crawl_id')
+        job_id = job_object.id
+        retries = job_data_dict.get('retries', 0) + 1
+        job_data_dict['retries'] = retries
+
+        crawl_id_log = job_data_dict.get('crawl_id', 'N/A')
 
         try:
-            job_id = job.jid
             if permanent or retries > 3:
-                # Bury the job (permanent failure or exceeded retries)
-                self.client.bury(job)
-                self.logger.info(f"Buried failed job {job_id} (permanent failure or max retries)")
+                self.logger.info(f"Burying failed job {job_id} (crawl_id: {crawl_id_log}). Permanent failure or max retries ({retries-1}) exceeded.")
+                self.client.bury(job_object)
             else:
-                # Retry with increasing delay (exponential backoff)
                 delay = min(30 * 60, 5 * (2 ** retries))
-                updated_job_data = {k: v for k, v in job_data.items() if k != '_job'}
-                serialized_job = self.serializer.serialize_job(updated_job_data)
-                tube = job.stats()['tube']
-                self.client.delete(job)
-                self.client.use_tube(tube)
+
+                serialized_new_job_body_str = self.serializer.serialize_job(job_data_dict)
+                serialized_new_job_body_bytes = serialized_new_job_body_str.encode('utf-8')
+
+                original_tube = job_object.stats().get('tube', self.DEFAULT_TUBES.get(job_data_dict.get('job_type'), 'default'))
+                original_ttr = job_object.stats().get('ttr', 60)
+                original_priority = job_object.stats().get('pri', self.DEFAULT_PRIORITIES['normal'])
+
+                self.client.delete(job_object)
+                self.logger.debug(f"Deleted old job instance {job_id} before re-queueing failed job.")
+
+                self.client.use_tube(original_tube)
                 new_job_id = self.client.put(
-                    serialized_job,
-                    priority=self.DEFAULT_PRIORITIES['normal'],
+                    serialized_new_job_body_bytes,
+                    priority=original_priority,
                     delay=delay,
-                    ttr=job.stats().get('ttr', 60)
+                    ttr=original_ttr
                 )
-                self.logger.info(f"Failed job {job_id} rescheduled as {new_job_id} with delay {delay}s (retry {retries})")
+                self.logger.info(
+                    f"Failed job {job_id} (crawl_id: {crawl_id_log}) was re-queued as new job {new_job_id} in tube '{original_tube}' "
+                    f"with delay {delay}s (retry attempt {retries})."
+                )
         except Exception as e:
-            self.logger.error(f"Failed to mark job {job.jid} as failed: {str(e)}")
+            self.logger.error(f"Error processing fail_job for job {job_id} (crawl_id: {crawl_id_log}): {str(e)}. Attempting to bury original job as a fallback.")
+            try:
+                if not (permanent or retries > 3):
+                    stats = job_object.stats()
+                    if stats and stats.get('state') != 'buried':
+                        self.client.bury(job_object)
+                        self.logger.info(f"Fallback: Buried original job {job_id} due to error during fail_job processing.")
+            except Exception as bury_e:
+                self.logger.error(f"Fallback bury attempt for job {job_id} also failed: {str(bury_e)}")
 
     def get_stats(self):
         """

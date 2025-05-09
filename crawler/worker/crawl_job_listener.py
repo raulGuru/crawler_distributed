@@ -110,10 +110,8 @@ class CrawlJobListener:
                             job_data['crawl_id'] = str(uuid.uuid4())
                         crawl_id = job_data['crawl_id']
                         self.logger.info(f"Processing job {job_id} (crawl_id={crawl_id})")
-                        # Immediately delete the job from Beanstalkd to prevent double-processing
-                        if job_obj:
-                            self.queue_manager.delete_job(job_obj)
-                        # Update MongoDB: set crawl_status to 'crawling' and update crawl_id
+
+                        success = False
                         try:
                             self.mongodb_client.update_one(
                                 MONGO_CRAWL_JOB_COLLECTION,
@@ -121,25 +119,29 @@ class CrawlJobListener:
                                 {'$set': {'crawl_id': crawl_id, 'crawl_status': 'crawling', 'updated_at': datetime.utcnow()}}
                             )
                             self.logger.info(f"Set crawl_status to 'crawling' for crawl_id {crawl_id}")
-                        except Exception as e:
-                            self.logger.error(f"Failed to update crawl_status for crawl_id {crawl_id}: {str(e)}")
-                        success = self.crawl_job_processor.process_job(job_id, job_data)
-                        if success:
-                            self.logger.info(f"Job {job_id} (crawl_id={crawl_id}) completed successfully")
-                        else:
-                            self.logger.warning(f"Failed to process job {job_id} (crawl_id={crawl_id}), marking as failed in MongoDB")
-                            # Update MongoDB crawl_status to 'failed'
+                            success = self.crawl_job_processor.process_job(job_id, job_data)
+
+                            if success:
+                                self.logger.info(f"Job {job_id} (crawl_id={crawl_id}) processed successfully by CrawlJobProcessor.")
+                                self.queue_manager.complete_job(job_obj, job_data)
+                            else:
+                                self.logger.warning(f"CrawlJobProcessor indicated failure for job {job_id} (crawl_id={crawl_id}). Attempting retry via Beanstalkd.")
+                                self.queue_manager.retry_job(job_obj, job_data, delay=60) # Retry with 1 min delay
+
+                        except Exception as processing_exception:
+                            self.logger.error(f"Exception during job processing for {job_id} (crawl_id={crawl_id}): {str(processing_exception)}")
                             try:
                                 self.mongodb_client.update_one(
                                     MONGO_CRAWL_JOB_COLLECTION,
                                     {'crawl_id': crawl_id},
                                     {'$set': {'crawl_status': 'failed', 'updated_at': datetime.utcnow()}}
                                 )
-                                self.logger.info(f"Set crawl_status to 'failed' for crawl_id {crawl_id}")
-                            except Exception as e:
-                                self.logger.error(f"Failed to update crawl_status to 'failed' for crawl_id {crawl_id}: {str(e)}")
+                            except Exception as mongo_e:
+                                self.logger.error(f"Additionally failed to update MongoDB status to 'failed' for {crawl_id} after processing exception: {mongo_e}")
+                            self.queue_manager.retry_job(job_obj, job_data, delay=60) # Retry on exception too
+
                 except Exception as e:
-                    self.logger.error(f"Error in job processing: {str(e)}")
+                    self.logger.error(f"Error in outer job processing loop: {str(e)}")
                     time.sleep(5)
             except Exception as e:
                 self.logger.error(f"Unhandled exception in main loop: {str(e)}")
