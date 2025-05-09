@@ -3,23 +3,18 @@ import sys
 import logging
 import time
 import signal
-import json
 from datetime import datetime
-import subprocess
 import uuid
 
 # Add the project root to the path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, SCRAPY_PATH
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, SCRAPY_PATH, DB_URI, MONGO_CRAWL_JOB_COLLECTION, BEANSTALKD_CRAWL_TUBE
 from lib.storage.mongodb_client import MongoDBClient
-from workers.job_processor import JobProcessor
+from crawler.worker.crawl_job_processor import CrawlJobProcessor
 
-MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/crawler')
-MONGO_COLLECTION = 'crawl_jobs'
-
-class CrawlerQueueListener:
+class CrawlJobListener:
     """
     Single-process queue listener that handles job setup, environment, post-processing,
     and runs the Scrapy spider directly. Logs results to MongoDB.
@@ -34,16 +29,16 @@ class CrawlerQueueListener:
         self.logger = self._setup_logging()
         self.queue_manager = None
         self.mongodb_client = None
-        self.job_processor = None
+        self.crawl_job_processor = None
         signal.signal(signal.SIGINT, self._handle_signal)
         signal.signal(signal.SIGTERM, self._handle_signal)
 
     def _setup_logging(self):
-        logger = logging.getLogger(f"CrawlerQueueListener_{self.instance_id}")
+        logger = logging.getLogger(f"CrawlJobListener_{self.instance_id}")
         logger.setLevel(logging.INFO)
         if not logger.handlers:  # Only add handlers if none exist
             os.makedirs(LOG_DIR, exist_ok=True)
-            log_file = os.path.join(LOG_DIR, f"crawler_queue_listener_{self.instance_id}.log")
+            log_file = os.path.join(LOG_DIR, f"crawl_job_listener_{self.instance_id}.log")
             file_handler = logging.FileHandler(log_file)
             file_handler.setLevel(logging.INFO)
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -64,13 +59,13 @@ class CrawlerQueueListener:
         try:
             self.logger.info("Initializing components")
             self.queue_manager = QueueManager(host=self.queue_host, port=self.queue_port)
-            self.mongodb_client = MongoDBClient(uri=MONGO_URI)
-            self.job_processor = JobProcessor(
+            self.mongodb_client = MongoDBClient(uri=DB_URI)
+            self.crawl_job_processor = CrawlJobProcessor(
                 logger=self.logger,
                 mongodb_client=self.mongodb_client,
                 scrapy_path=SCRAPY_PATH,
                 log_dir=LOG_DIR,
-                mongo_collection=MONGO_COLLECTION
+                mongo_collection=MONGO_CRAWL_JOB_COLLECTION
             )
             self.logger.info("Components initialized successfully")
             return True
@@ -80,7 +75,7 @@ class CrawlerQueueListener:
 
     def _reserve_job(self, tubes=None, timeout=None):
         if tubes is None:
-            tubes = ['crawl_jobs']
+            tubes = [BEANSTALKD_CRAWL_TUBE]
         try:
             for tube in tubes:
                 self.queue_manager.client.watch_tube(tube)
@@ -104,7 +99,7 @@ class CrawlerQueueListener:
         self.running = True
         while self.running and not self.shutdown_requested:
             try:
-                tubes = ['crawl_jobs']
+                tubes = [BEANSTALKD_CRAWL_TUBE]
                 for tube in tubes:
                     self.queue_manager.client.watch_tube(tube)
                 try:
@@ -117,18 +112,18 @@ class CrawlerQueueListener:
                         self.logger.info(f"Processing job {job_id} (crawl_id={crawl_id})")
                         # Immediately delete the job from Beanstalkd to prevent double-processing
                         if job_obj:
-                            self.queue_manager.client.delete(job_obj)
+                            self.queue_manager.delete_job(job_obj)
                         # Update MongoDB: set crawl_status to 'crawling' and update crawl_id
                         try:
                             self.mongodb_client.update_one(
-                                'crawl_jobs',
+                                MONGO_CRAWL_JOB_COLLECTION,
                                 {'crawl_id': crawl_id},
                                 {'$set': {'crawl_id': crawl_id, 'crawl_status': 'crawling', 'updated_at': datetime.utcnow()}}
                             )
                             self.logger.info(f"Set crawl_status to 'crawling' for crawl_id {crawl_id}")
                         except Exception as e:
                             self.logger.error(f"Failed to update crawl_status for crawl_id {crawl_id}: {str(e)}")
-                        success = self.job_processor.process_job(job_id, job_data)
+                        success = self.crawl_job_processor.process_job(job_id, job_data)
                         if success:
                             self.logger.info(f"Job {job_id} (crawl_id={crawl_id}) completed successfully")
                         else:
@@ -136,7 +131,7 @@ class CrawlerQueueListener:
                             # Update MongoDB crawl_status to 'failed'
                             try:
                                 self.mongodb_client.update_one(
-                                    'crawl_jobs',
+                                    MONGO_CRAWL_JOB_COLLECTION,
                                     {'crawl_id': crawl_id},
                                     {'$set': {'crawl_status': 'failed', 'updated_at': datetime.utcnow()}}
                                 )
@@ -169,7 +164,7 @@ def main():
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Queue port')
     parser.add_argument('--instance-id', type=int, default=0, help='Worker instance ID')
     args = parser.parse_args()
-    worker = CrawlerQueueListener(
+    worker = CrawlJobListener(
         queue_host=args.queue_host,
         queue_port=args.queue_port,
         instance_id=args.instance_id

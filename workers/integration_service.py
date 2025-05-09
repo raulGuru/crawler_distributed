@@ -17,7 +17,7 @@ from lib.utils.logging_utils import LoggingUtils
 from lib.utils.health_check import HealthCheck
 from config.base_settings import (
     QUEUE_HOST, QUEUE_PORT, DB_URI, LOG_DIR,
-    CRAWLER_QUEUE_LISTENER_PATH, MONITOR_WORKER_PATH, PARSE_WORKER_PATH
+    CRAWLER_JOB_LISTENER_PATH, MONITOR_WORKER_PATH, PARSE_WORKER_PATH
 )
 from workers.worker_manager import WorkerManager
 
@@ -29,8 +29,8 @@ class IntegrationService:
 
     # Worker configurations
     WORKERS = {
-        'crawler_queue_listener': {
-            'script': CRAWLER_QUEUE_LISTENER_PATH,
+        'crawl_job_listener': {
+            'script': CRAWLER_JOB_LISTENER_PATH,
             'required': True,  # System requires this worker
             'instances': 4,    # Number of instances to run
             'restart': True,   # Auto-restart if it crashes
@@ -42,14 +42,7 @@ class IntegrationService:
             'instances': 1,
             'restart': True,
             'args': []
-        },
-        # 'parse_worker': {
-        #     'script': PARSE_WORKER_PATH,
-        #     'required': True,
-        #     'instances': 1,    # Multiple parser workers for parallel processing
-        #     'restart': True,
-        #     'args': []
-        # }
+        }
     }
 
     def __init__(self, queue_host: str = QUEUE_HOST, queue_port: int = QUEUE_PORT, db_uri: str = DB_URI,

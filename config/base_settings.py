@@ -37,9 +37,8 @@ QUEUE_PORT = int(os.environ.get('QUEUE_PORT', '11300'))
 QUEUE_TUBES = ['crawl_jobs', 'parse_jobs', 'monitor_jobs']
 
 # Worker script paths
-CRAWLER_QUEUE_LISTENER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'crawler_queue_listener.py')
-CRAWLER_LAUNCHER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'crawler_launcher.py')
-PARSE_WORKER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'parse_worker.py')
+CRAWLER_JOB_LISTENER_PATH = os.path.join(PROJECT_ROOT, 'crawler', 'worker', 'crawl_job_listener.py')
+PARSE_WORKER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'job_dispatcher.py')
 MONITOR_WORKER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'monitor_worker.py')
 
 # Scrapy
@@ -67,6 +66,8 @@ MONGO_USER = os.environ.get('MONGO_USER', '')
 MONGO_PASSWORD = os.environ.get('MONGO_PASSWORD', '')
 MONGO_AUTH_SOURCE = os.environ.get('MONGO_AUTH_SOURCE', 'admin')
 MONGO_URI = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}?authSource={MONGO_AUTH_SOURCE}" if MONGO_USER else f"mongodb://{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}"
+MONGO_CRAWL_JOB_COLLECTION = 'crawl_jobs'
+MONGO_PARSE_JOB_COLLECTION = 'parse_jobs'
 
 # Beanstalkd configuration
 BEANSTALKD_HOST = os.environ.get('BEANSTALKD_HOST', 'localhost')

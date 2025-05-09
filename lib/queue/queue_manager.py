@@ -1,4 +1,6 @@
 import logging
+
+from config.base_settings import BEANSTALKD_CRAWL_TUBE
 from .beanstalkd_client import BeanstalkdClient
 from .job_serializer import JobSerializer
 
@@ -10,7 +12,7 @@ class QueueManager:
 
     # Default tube names
     DEFAULT_TUBES = {
-        'crawl': 'crawl_jobs',
+        'crawl': BEANSTALKD_CRAWL_TUBE,
         'parse': 'parse_jobs',
         'monitor': 'monitor_jobs'
     }
@@ -110,14 +112,14 @@ class QueueManager:
 
         try:
             # Serialize job data
-            serialized_job = self.serializer.serialize_job(job_data)
+            serialized_job_str = self.serializer.serialize_job(job_data)
+            serialized_job_bytes = serialized_job_str.encode('utf-8')
 
             # Use the tube
-            self.client.use_tube(tube)
-
+            self.use_tube(tube)
             # Put the job
             job_id = self.client.put(
-                serialized_job,
+                serialized_job_bytes,
                 priority=numeric_priority,
                 delay=delay,
                 ttr=ttr
@@ -148,15 +150,8 @@ class QueueManager:
 
         try:
             # Watch specified tubes
-            for tube in tubes:
-                self.client.watch_tube(tube)
-
-            # Ignore default tube if not in tubes
-            if 'default' not in tubes:
-                try:
-                    self.client.ignore_tube('default')
-                except:
-                    pass  # Ignore if not watching default
+            for t in tubes:
+                self.watch_tube(t)
 
             # Reserve a job
             job = self.client.reserve(timeout=timeout)
@@ -165,7 +160,17 @@ class QueueManager:
 
             # Deserialize job data
             try:
-                job_data = self.serializer.deserialize_job(job.body)
+                job_body_str = None
+                if isinstance(job.body, bytes):
+                    job_body_str = job.body.decode('utf-8')
+                elif isinstance(job.body, str):
+                    # This might be an old job that was enqueued as a string
+                    self.logger.warning(f"Job {job.jid} body is already a string. Proceeding with deserialization. This might indicate an old job format.")
+                    job_body_str = job.body
+                else:
+                    raise ValueError(f"Unexpected type for job.body: {type(job.body)}")
+
+                job_data = self.serializer.deserialize_job(job_body_str)
                 job_id = job.jid
                 # Store the job object in the job data for later operations
                 job_data['_job'] = job
@@ -198,8 +203,8 @@ class QueueManager:
 
         try:
             job_id = job.jid
-            self.client.delete(job)
-            self.logger.info(f"Completed and deleted job {job_id}")
+            self.delete_job(job) # Use the new direct delete_job method
+            self.logger.info(f"Completed and deleted job {job_id} via complete_job.")
 
             # Also check for any zombie jobs with the same crawl_id
             crawl_id = job_data.get('crawl_id')
@@ -394,3 +399,52 @@ class QueueManager:
         if self.client:
             self.client.close()
             self.client = None
+
+    def use_tube(self, tube_name: str):
+        """
+        Select a tube for subsequent 'put' operations.
+        This will also create the tube if it doesn't exist on the server.
+        """
+        try:
+            self.client.use_tube(tube_name)
+        except Exception as e:
+            self.logger.error(f"QueueManager: Failed to use tube {tube_name}: {str(e)}")
+            raise
+
+    def watch_tube(self, tube_name: str):
+        """
+        Add the given tube to the watch list for the current connection.
+        'reserve' will take jobs from any of the watched tubes.
+        """
+        try:
+            return self.client.watch_tube(tube_name)
+        except Exception as e:
+            self.logger.error(f"QueueManager: Failed to watch tube {tube_name}: {str(e)}")
+            raise
+
+    def ignore_tube(self, tube_name: str):
+        """
+        Stop watching the given tube.
+        """
+        try:
+            return self.client.ignore_tube(tube_name)
+        except Exception as e:
+            self.logger.error(f"QueueManager: Failed to ignore tube {tube_name}: {str(e)}")
+            raise
+
+    def delete_job(self, job_obj):
+        """
+        Delete a job from the queue.
+        Requires the job object obtained from dequeue_job.
+        """
+        if not job_obj:
+            self.logger.error("Cannot delete job: job object is missing")
+            return
+        try:
+            job_id = job_obj.id
+            self.client.delete(job_obj)
+            self.logger.info(f"Deleted job {job_id} directly.")
+        except Exception as e:
+            self.logger.error(f"Failed to delete job {getattr(job_obj, 'id', 'unknown')}: {str(e)}")
+            # Potentially re-raise if critical
+            # raise

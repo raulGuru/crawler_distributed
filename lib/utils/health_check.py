@@ -269,7 +269,7 @@ class HealthCheck:
             dict: Health check result
         """
         if components is None:
-            components = ['queue_listener', 'monitor_worker', 'parse_worker']
+            components = ['crawl_job_listener', 'monitor_worker', 'parse_worker']
 
         result = {
             'component': 'processes',

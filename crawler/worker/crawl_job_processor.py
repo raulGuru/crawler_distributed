@@ -2,9 +2,9 @@ import os
 import time
 import subprocess
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-class JobProcessor:
+class CrawlJobProcessor:
     """
     Handles the processing of crawl jobs: builds Scrapy command, runs the process,
     and logs results to MongoDB.
@@ -83,7 +83,7 @@ class JobProcessor:
             start_time = time.time()
             process = subprocess.Popen(
                 cmd,
-                cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'crawler', 'spider_project')),
+                cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'spider_project')),
                 env=os.environ.copy(),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

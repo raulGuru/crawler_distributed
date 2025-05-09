@@ -99,7 +99,7 @@ def kill_related_python_processes():
             if proc.info['name'] == 'python' or proc.info['name'] == 'python3':
                 cmdline = ' '.join(proc.info['cmdline'])
                 if any(keyword in cmdline for keyword in [
-                    'integration_service', 'monitor_worker', 'parse_worker', 'crawler_queue_listener', 'spider_project', 'submit_job', 'run_integration.sh']):
+                    'integration_service', 'monitor_worker', 'parse_worker', 'crawl_job_listener', 'spider_project', 'submit_crawl_job', 'run_integration.sh']):
                     print(f"Killing process PID {proc.info['pid']}: {cmdline}")
                     proc.kill()
                     killed += 1

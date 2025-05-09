@@ -30,7 +30,7 @@ class WorkerManager:
             '--queue-host', self.queue_host,
             '--queue-port', str(self.queue_port)
         ])
-        if worker_name not in ['crawler_queue_listener']:
+        if worker_name not in ['crawl_job_listener']:
             cmd.extend(['--db-uri', self.db_uri])
         log_file_path = os.path.join(self.log_dir, f"{worker_name}_{instance_id}.log")
         process = None

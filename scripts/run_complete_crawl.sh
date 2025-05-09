@@ -163,7 +163,7 @@ if [ -n "$URL" ]; then
 fi
 
 # Build and execute the submit job command
-SUBMIT_CMD="python scripts/submit_job.py --domain \"$DOMAIN\" --max-pages \"$MAX_PAGES\" $SITEMAP_FLAG $SINGLE_URL_FLAG $URL_PARAM"
+SUBMIT_CMD="python scripts/submit_crawl_job.py --domain \"$DOMAIN\" --max-pages \"$MAX_PAGES\" $SITEMAP_FLAG $SINGLE_URL_FLAG $URL_PARAM"
 echo "Executing: $SUBMIT_CMD"
 JOB_OUTPUT=$(eval $SUBMIT_CMD)
 echo "$JOB_OUTPUT"

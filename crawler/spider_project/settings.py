@@ -196,7 +196,7 @@ DOWNLOADER_MIDDLEWARES = {
 ITEM_PIPELINES = {
     'crawler.spider_project.pipelines.html_storage_pipeline.HTMLStoragePipeline': 100,
     'crawler.spider_project.pipelines.stats_pipeline.StatsPipeline': 200,
-    'crawler.spider_project.pipelines.queue_pipeline.QueuePipeline': 300,
+    'crawler.spider_project.pipelines.parser_trigger_pipeline.ParserTriggerPipeline': 300,
 }
 
 SPIDER_MIDDLEWARES = {

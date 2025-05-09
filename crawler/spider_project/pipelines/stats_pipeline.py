@@ -3,8 +3,8 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from pymongo import MongoClient
 from scrapy import Spider
-from scrapy.http import Response
 from urllib.parse import urlparse
+from config.base_settings import MONGO_CRAWL_JOB_COLLECTION
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class StatsPipeline:
         try:
             # Initialize MongoDB connection
             self.mongo_client = MongoClient(self.mongodb_uri)
-            self.crawl_jobs = self.mongo_client.crawler['crawl_jobs']
+            self.crawl_jobs = self.mongo_client.crawler[MONGO_CRAWL_JOB_COLLECTION]
 
             # Initialize stats
             # Get domain from spider.domain or extract from URL for URLSpider

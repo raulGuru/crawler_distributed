@@ -4,16 +4,14 @@ import sys
 import argparse
 from datetime import datetime
 import logging
-import json
 from typing import Any, Dict
 from urllib.parse import urlparse
 import uuid
 
-# Add the project root to the path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION
 from lib.storage.mongodb_client import MongoDBClient
 
 def setup_logging(domain):
@@ -126,7 +124,7 @@ def submit_crawl_job(args):
     if job_data.get('url'):
         query['job_data.url'] = job_data.get('url')
     query['crawl_status'] = {'$nin': ['completed', 'failed']}
-    existing_job = mongodb_client.find_one('crawl_jobs', query)
+    existing_job = mongodb_client.find_one(MONGO_CRAWL_JOB_COLLECTION, query)
     job_doc = {
         'crawl_id': crawl_id,
         'job_id': job_id,
@@ -137,11 +135,11 @@ def submit_crawl_job(args):
     }
     if existing_job:
         # Update the existing job with new parameters and set crawl_status to 'fresh'
-        mongodb_client.update_one('crawl_jobs', {'_id': existing_job['_id']}, {'$set': job_doc}, upsert=False)
+        mongodb_client.update_one(MONGO_CRAWL_JOB_COLLECTION, {'_id': existing_job['_id']}, {'$set': job_doc}, upsert=False)
         print(f"Updated existing job for domain {job_data.get('domain')} (crawl_id={existing_job['crawl_id']})")
         crawl_id = existing_job['crawl_id']
     else:
-        mongodb_client.insert_one('crawl_jobs', job_doc)
+        mongodb_client.insert_one(MONGO_CRAWL_JOB_COLLECTION, job_doc)
         print(f"Inserted new job for domain {job_data.get('domain')} (crawl_id={crawl_id})")
     mongodb_client.close()
 
@@ -166,7 +164,7 @@ def main():
     parser.set_defaults(use_sitemap=None)
     parser.add_argument('--queue-host', default=QUEUE_HOST, help='Beanstalkd host')
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Beanstalkd port')
-    parser.add_argument('--tube', default='crawl_jobs', help='Beanstalkd tube')
+    parser.add_argument('--tube', default=MONGO_CRAWL_JOB_COLLECTION, help='Beanstalkd tube')
     parser.add_argument('--priority', default='normal', help='Job priority (high, normal, low)')
     args = parser.parse_args()
     if not args.domain and not args.url:
