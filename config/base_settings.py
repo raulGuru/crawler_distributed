@@ -74,6 +74,7 @@ BEANSTALKD_HOST = os.environ.get('BEANSTALKD_HOST', 'localhost')
 BEANSTALKD_PORT = int(os.environ.get('BEANSTALKD_PORT', 11300))
 BEANSTALKD_CRAWL_TUBE = os.environ.get('BEANSTALKD_CRAWL_TUBE', 'crawl_jobs')
 BEANSTALKD_PARSE_TUBE = os.environ.get('BEANSTALKD_PARSE_TUBE', 'parse_jobs')
+BEANSTALKD_TTR = int(os.environ.get('BEANSTALKD_TTR', 900))
 
 # General settings
 HOSTNAME = socket.gethostname()

@@ -124,14 +124,14 @@ class BeanstalkdClient:
             self.connection = None
             raise
 
-    def delete(self, job):
-        """Delete a job"""
+    def delete(self, job_id: int):
+        """Delete a job by its ID"""
         self._ensure_connection()
         try:
-            self.connection.delete(job.id)
-            self.logger.debug(f"Deleted job {job.id}")
+            self.connection.delete(job_id)
+            self.logger.debug(f"Deleted job {job_id}")
         except Exception as e:
-            self.logger.error(f"Failed to delete job {job.id}: {str(e)}")
+            self.logger.error(f"Failed to delete job {job_id}: {str(e)}")
             raise
 
     def release(self, job, priority=1000, delay=0):

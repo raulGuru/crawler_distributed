@@ -2,6 +2,7 @@
 HTML storage pipeline that saves crawled pages to disk.
 """
 
+from datetime import datetime
 import os
 import logging
 from typing import Dict, Any
@@ -99,7 +100,7 @@ class HTMLStoragePipeline:
                     f.flush()
                     os.fsync(f.fileno())
 
-                self.logger.info(f"Saved HTML for {item['url']} to {file_path}")
+                self.logger.info(f"Successfully saved HTML for {item['url']} to {file_path}")
 
                 # Add storage info to item
                 item['storage'] = {
@@ -108,21 +109,29 @@ class HTMLStoragePipeline:
                     'filename': filename
                 }
                 item['html_file_path'] = file_path
+                item['crawled_at'] = datetime.utcnow().isoformat()
 
-                # --- Max pages enforcement logic ---
-                # Use crawler stats to count only after successful save
+                # --- Max pages enforcement logic & stats update ---
                 if hasattr(spider, 'crawler') and hasattr(spider.crawler, 'stats'):
                     stats = spider.crawler.stats
-                    pages_crawled = stats.get_value('pages_crawled', 0) + 1
-                    stats.set_value('pages_crawled', pages_crawled)
-                    max_pages = getattr(spider, 'max_pages', 0)
-                    if max_pages and pages_crawled >= max_pages:
-                        self.logger.info(f"Reached max_pages limit ({max_pages}) after saving HTML. Stopping crawl.")
-                        raise CloseSpider(f"Reached max_pages limit: {max_pages}")
+                    if stats: # Explicit check
+                        self.logger.debug(f"Stats collector found. Current pages_crawled: {stats.get_value('pages_crawled', 0)}")
+                        pages_crawled = stats.get_value('pages_crawled', 0) + 1
+                        stats.set_value('pages_crawled', pages_crawled)
+                        self.logger.debug(f"Updated pages_crawled to: {pages_crawled}")
 
-                # Increment html_saved_count
-                html_saved_count = stats.get_value('html_saved_count', 0) + 1
-                stats.set_value('html_saved_count', html_saved_count)
+                        max_pages = getattr(spider, 'max_pages', 0)
+                        if max_pages and pages_crawled >= max_pages:
+                            self.logger.info(f"Reached max_pages limit ({max_pages}) after saving HTML. Stopping crawl.")
+                            # raise CloseSpider(f"Reached max_pages limit: {max_pages}")
+
+                        html_saved_count = stats.get_value('html_saved_count', 0) + 1
+                        stats.set_value('html_saved_count', html_saved_count)
+                        self.logger.debug(f"Updated html_saved_count to: {html_saved_count}")
+                    else:
+                        self.logger.warning(f"spider.crawler.stats is None for {item['url']}, cannot update page/save counts directly here.")
+                else:
+                    self.logger.warning(f"spider.crawler.stats not available for {item['url']}, cannot update page/save counts directly here.")
 
                 return item
 

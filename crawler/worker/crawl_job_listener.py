@@ -98,55 +98,63 @@ class CrawlJobListener:
             return False
         self.running = True
         while self.running and not self.shutdown_requested:
+            job_id = None
+            job_data = None
+            job_obj = None
+            crawl_id = "N/A_BEFORE_DEQUEUE"
             try:
                 tubes = [BEANSTALKD_CRAWL_TUBE]
-                for tube in tubes:
-                    self.queue_manager.client.watch_tube(tube)
-                try:
-                    job_id, job_data, job_obj = self.queue_manager.dequeue_job(tubes=tubes, timeout=5)
-                    if job_id:
-                        # Ensure a unique crawl_id is present
-                        if 'crawl_id' not in job_data or not job_data['crawl_id']:
-                            job_data['crawl_id'] = str(uuid.uuid4())
-                        crawl_id = job_data['crawl_id']
-                        self.logger.info(f"Processing job {job_id} (crawl_id={crawl_id})")
+                job_id, job_data, job_obj = self.queue_manager.dequeue_job(tubes=tubes, timeout=5)
 
-                        success = False
+                if job_id and job_data:
+                    if 'crawl_id' not in job_data or not job_data['crawl_id']:
+                        job_data['crawl_id'] = str(uuid.uuid4())
+
+                    crawl_id = job_data['crawl_id']
+                    self.logger.info(f"DEQUEUED job {job_id} (crawl_id={crawl_id}). Job data keys: {list(job_data.keys())}")
+
+                    success = False
+                    try:
+                        self.mongodb_client.update_one(
+                            MONGO_CRAWL_JOB_COLLECTION,
+                            {'crawl_id': crawl_id},
+                            {'$set': {'crawl_id': crawl_id, 'crawl_status': 'crawling', 'updated_at': datetime.utcnow()}}
+                        )
+                        self.logger.info(f"Set crawl_status to 'crawling' for crawl_id {crawl_id}.")
+                        success = self.crawl_job_processor.process_job(job_id, job_data)
+
+                        if success:
+                            self.logger.info(f"Job {job_id} (crawl_id={crawl_id}) processed successfully by CrawlJobProcessor. Completing job.")
+                            self.queue_manager.complete_job(job_obj, job_data)
+                        else:
+                            self.logger.warning(f"CrawlJobProcessor indicated failure for job {job_id} (crawl_id={crawl_id}). Retrying via Beanstalkd with 60s delay.")
+                            self.queue_manager.retry_job(job_obj, job_data, delay=60)
+
+                    except Exception as processing_exception:
+                        self.logger.error(f"EXCEPTION during job processing for job {job_id} (crawl_id={crawl_id}): {processing_exception}")
                         try:
                             self.mongodb_client.update_one(
                                 MONGO_CRAWL_JOB_COLLECTION,
                                 {'crawl_id': crawl_id},
-                                {'$set': {'crawl_id': crawl_id, 'crawl_status': 'crawling', 'updated_at': datetime.utcnow()}}
+                                {'$set': {'crawl_status': 'failed', 'updated_at': datetime.utcnow()}}
                             )
-                            self.logger.info(f"Set crawl_status to 'crawling' for crawl_id {crawl_id}")
-                            success = self.crawl_job_processor.process_job(job_id, job_data)
+                        except Exception as mongo_e:
+                            self.logger.error(f"Additionally failed to update MongoDB status to 'failed' for {crawl_id} after processing exception: {mongo_e}")
 
-                            if success:
-                                self.logger.info(f"Job {job_id} (crawl_id={crawl_id}) processed successfully by CrawlJobProcessor.")
-                                self.queue_manager.complete_job(job_obj, job_data)
-                            else:
-                                self.logger.warning(f"CrawlJobProcessor indicated failure for job {job_id} (crawl_id={crawl_id}). Attempting retry via Beanstalkd.")
-                                self.queue_manager.retry_job(job_obj, job_data, delay=60) # Retry with 1 min delay
+                        if job_obj and job_data:
+                            self.queue_manager.retry_job(job_obj, job_data, delay=60)
+                        else:
+                            self.logger.error(f"Job Cannot retry job {job_id} (crawl_id={crawl_id}) due to missing job_obj or job_data after exception.")
+                elif job_id is None and job_data is None and job_obj is None:
+                    self.logger.debug(f"Job dequeue timeout. No job received.")
+                else:
+                    self.logger.warning(f"Job unusual return from dequeue_job: job_id={job_id}, job_data is None: {job_data is None}, job_obj is None: {job_obj is None}")
 
-                        except Exception as processing_exception:
-                            self.logger.error(f"Exception during job processing for {job_id} (crawl_id={crawl_id}): {str(processing_exception)}")
-                            try:
-                                self.mongodb_client.update_one(
-                                    MONGO_CRAWL_JOB_COLLECTION,
-                                    {'crawl_id': crawl_id},
-                                    {'$set': {'crawl_status': 'failed', 'updated_at': datetime.utcnow()}}
-                                )
-                            except Exception as mongo_e:
-                                self.logger.error(f"Additionally failed to update MongoDB status to 'failed' for {crawl_id} after processing exception: {mongo_e}")
-                            self.queue_manager.retry_job(job_obj, job_data, delay=60) # Retry on exception too
-
-                except Exception as e:
-                    self.logger.error(f"Error in outer job processing loop: {str(e)}")
-                    time.sleep(5)
             except Exception as e:
-                self.logger.error(f"Unhandled exception in main loop: {str(e)}")
+                self.logger.error(f"UNHANDLED EXCEPTION in main processing loop (job_id: {job_id}, crawl_id: {crawl_id}): {e}")
                 time.sleep(5)
-        self.logger.info("Shutting down")
+
+        self.logger.info(f"Shutting down.")
         self.cleanup()
 
     def cleanup(self):

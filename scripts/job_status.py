@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 import os
 import sys
+
+# Add project root to Python path
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.append(PROJECT_ROOT)
+
 import argparse
 import logging
 import json
@@ -268,12 +274,97 @@ def list_all_jobs_with_status(queue_manager, limit=10):
     print("\nNote: Reserved jobs are currently running and cannot be listed due to Beanstalkd limitations. Only their counts are shown above.")
 
 
+def display_detailed_beanstalkd_view(queue_manager):
+    """Display the comprehensive monitoring view from QueueManager."""
+    print("\n=== Detailed Beanstalkd Monitoring View ===")
+    try:
+        view_data = queue_manager.get_detailed_monitoring_view()
+
+        if not view_data:
+            print("Failed to retrieve detailed monitoring view.")
+            return
+
+        # Server Stats
+        print("\n--- Server Statistics ---")
+        if view_data.get('server_stats') and not view_data['server_stats'].get('error'):
+            for key, value in view_data['server_stats'].items():
+                print(f"  {key}: {value}")
+        elif view_data.get('server_stats', {}).get('error'):
+            print(f"  Error fetching server stats: {view_data['server_stats']['error']}")
+        else:
+            print("  No server stats available.")
+
+        if view_data.get('error_listing_tubes'):
+            print(f"\nError listing tubes: {view_data['error_listing_tubes']}")
+            return
+
+        # Tubes Details
+        print("\n--- Tubes Details ---")
+        if not view_data.get('tubes_details'):
+            print("  No tubes found or no details available.")
+            return
+
+        for tube_name, details in view_data['tubes_details'].items():
+            print(f"\n--- Tube: {tube_name} ---")
+
+            # Tube Stats
+            print("  Tube Statistics:")
+            if details.get('stats') and not details['stats'].get('error'):
+                # Use tabulate for tube stats for better alignment
+                tube_stats_table = []
+                headers = ["Statistic", "Value"]
+                for key, value in details['stats'].items():
+                    tube_stats_table.append([key, value])
+                print(tabulate(tube_stats_table, headers=headers, tablefmt="plain", stralign="left"))
+            elif details.get('stats', {}).get('error'):
+                print(f"    Error fetching stats for tube {tube_name}: {details['stats']['error']}")
+            else:
+                print("    No stats available for this tube.")
+
+            # Peeked Jobs
+            for job_type_key in ['peeked_ready_job', 'peeked_delayed_job', 'peeked_buried_job']:
+                job_info = details.get(job_type_key)
+                job_type_name = job_type_key.replace('peeked_', '').replace('_job', '').capitalize()
+                print(f"  Peeked {job_type_name} Job:")
+                if job_info and not job_info.get('error'):
+                    print(f"    Job ID: {job_info.get('id', 'N/A')}")
+                    print("    Body:")
+                    if job_info.get('body') and not job_info['body'].get('error_deserializing'):
+                        print(json.dumps(job_info['body'], indent=2).replace("\n", "\n      "))
+                    elif job_info.get('body', {}).get('error_deserializing'):
+                        print(f"      Error deserializing: {job_info['body']['error_deserializing']}")
+                        if 'raw_body' in job_info['body']:
+                             print(f"      Raw Body: {job_info['body']['raw_body']}")
+                    else:
+                        print("      N/A or empty")
+
+                    print("    Job Stats:")
+                    if job_info.get('job_stats') and not job_info['job_stats'].get('error'):
+                        # Use tabulate for job stats for better alignment
+                        job_stats_table = []
+                        js_headers = ["Stat", "Value"]
+                        for key, value in job_info['job_stats'].items():
+                            job_stats_table.append([key, value])
+                        print(tabulate(job_stats_table, headers=js_headers, tablefmt="plain", stralign="left"))
+                    elif job_info.get('job_stats', {}).get('error'):
+                        print(f"      Error fetching job stats: {job_info['job_stats']['error']}")
+                    else:
+                        print("      No job stats available.")
+                elif job_info and job_info.get('error'):
+                    print(f"    Error peeking {job_type_name.lower()} job: {job_info['error']}")
+                else:
+                    print("    No job found in this state.")
+    except Exception as e:
+        print(f"An error occurred while generating the detailed view: {str(e)}")
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Check job status (Beanstalkd only)')
     parser.add_argument('--queue-host', default=QUEUE_HOST, help='Beanstalkd host')
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Beanstalkd port')
     parser.add_argument('--all-jobs', action='store_true', help='List all jobs with status')
+    parser.add_argument('--full-monitor', action='store_true', help='Display a full, detailed monitoring view of Beanstalkd')
     subparsers = parser.add_subparsers(dest='command', help='Command to execute')
     list_parser = subparsers.add_parser('list', help='List recent jobs')
     list_parser.add_argument('--limit', type=int, default=10, help='Maximum number of jobs to show')
@@ -294,6 +385,10 @@ def main():
             get_job_details(queue_manager, args.crawl_id)
         elif args.all_jobs:
             list_all_jobs_with_status(queue_manager, limit=args.limit if hasattr(args, 'limit') else 10)
+            queue_manager.close()
+            return 0
+        elif args.full_monitor:
+            display_detailed_beanstalkd_view(queue_manager)
             queue_manager.close()
             return 0
         else:

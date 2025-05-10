@@ -6,7 +6,6 @@ import signal
 import subprocess
 import threading
 import argparse
-from datetime import datetime
 
 # Add the project root to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -17,7 +16,11 @@ from lib.utils.logging_utils import LoggingUtils
 from lib.utils.health_check import HealthCheck
 from config.base_settings import (
     QUEUE_HOST, QUEUE_PORT, DB_URI, LOG_DIR,
-    CRAWLER_JOB_LISTENER_PATH, MONITOR_WORKER_PATH, PARSE_WORKER_PATH
+    CRAWLER_JOB_LISTENER_PATH, MONITOR_WORKER_PATH,
+    PROJECT_ROOT
+)
+from config.parser_settings import (
+    ALL_PARSER_TASK_TYPES
 )
 from workers.worker_manager import WorkerManager
 
@@ -27,8 +30,7 @@ class IntegrationService:
     Service that coordinates all workers and handles their lifecycle
     """
 
-    # Worker configurations
-    WORKERS = {
+    CORE_WORKERS = {
         'crawl_job_listener': {
             'script': CRAWLER_JOB_LISTENER_PATH,
             'required': True,  # System requires this worker
@@ -36,17 +38,17 @@ class IntegrationService:
             'restart': True,   # Auto-restart if it crashes
             'args': []         # Additional command line arguments
         },
-        'monitor_worker': {
-            'script': MONITOR_WORKER_PATH,
-            'required': True,
-            'instances': 1,
-            'restart': True,
-            'args': []
-        }
+        # 'monitor_worker': {
+        #     'script': MONITOR_WORKER_PATH,
+        #     'required': True,
+        #     'instances': 1,
+        #     'restart': True,
+        #     'args': []
+        # }
     }
 
     def __init__(self, queue_host: str = QUEUE_HOST, queue_port: int = QUEUE_PORT, db_uri: str = DB_URI,
-                 workers: dict = None, health_check_interval: int = 60) -> None:
+                 health_check_interval: int = 60) -> None:
         """
         Initialize the integration service
 
@@ -54,13 +56,11 @@ class IntegrationService:
             queue_host (str): Beanstalkd host
             queue_port (int): Beanstalkd port
             db_uri (str): MongoDB URI
-            workers (dict, optional): Worker configuration, if None use defaults
             health_check_interval (int): Health check interval in seconds
         """
         self.queue_host = queue_host
         self.queue_port = queue_port
         self.db_uri = db_uri
-        self.workers = workers or self.WORKERS
         self.health_check_interval = health_check_interval
         self.logger = LoggingUtils.setup_logger('integration_service')
         self.mongodb_client = None
@@ -69,6 +69,9 @@ class IntegrationService:
         self.running = False
         self.shutdown_requested = False
         self.health_check_thread = None
+
+        self.workers = self._generate_worker_configurations()
+
         self.worker_manager = WorkerManager(
             workers=self.workers,
             logger=self.logger,
@@ -81,6 +84,35 @@ class IntegrationService:
         signal.signal(signal.SIGTERM, self._handle_signal)
         if not os.path.exists(LOG_DIR):
             os.makedirs(LOG_DIR, exist_ok=True)
+
+    def _generate_worker_configurations(self) -> dict:
+        """Generates the full worker configuration dictionary including parser workers."""
+        combined_workers = self.CORE_WORKERS.copy()
+        self.logger.info(f"Found {len(ALL_PARSER_TASK_TYPES)} parser task types to configure.")
+
+        for task_type, task_details in ALL_PARSER_TASK_TYPES.items():
+            script_filename = task_details.get('worker_script_file')
+            if not script_filename:
+                self.logger.error(f"Missing 'worker_script_file' for task_type '{task_type}'. Skipping this worker.")
+                continue
+
+            script_path = os.path.join(PROJECT_ROOT, 'parser', 'workers', script_filename)
+            num_instances = task_details.get('instances', 1)
+
+            if task_type in combined_workers:
+                self.logger.warning(f"Parser task_type '{task_type}' conflicts with a core worker name. Parser worker config will overwrite.")
+
+            combined_workers[task_type] = {
+                'script': script_path,
+                'required': True,
+                'instances': num_instances,
+                'restart': True,
+                'args': []
+            }
+            self.logger.info(f"Configured parser worker for '{task_type}': script='{script_path}', instances={num_instances}")
+
+        self.logger.info(f"Total workers configured: {len(combined_workers)}")
+        return combined_workers
 
     def _handle_signal(self, signum: int, frame: object) -> None:
         """Handle termination signals"""
@@ -188,6 +220,14 @@ class IntegrationService:
     def _cleanup(self) -> None:
         """Cleanup resources"""
         self.logger.info("Cleaning up resources")
+
+        if self.worker_manager:
+            try:
+                # WorkerManager.shutdown_all_workers() is called by self.stop()
+                # No explicit close method in WorkerManager from snippet, assume it cleans up on its own
+                pass
+            except Exception as e:
+                self.logger.error(f"Error during WorkerManager cleanup (if any): {str(e)}")
 
         # Close queue manager
         if self.queue_manager:

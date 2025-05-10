@@ -412,6 +412,90 @@ class QueueManager:
             self.logger.error(f"Failed to get queue stats: {str(e)}")
             return stats
 
+    def get_detailed_monitoring_view(self):
+        """
+        Provides a detailed, comprehensive view of the Beanstalkd instance,
+        including server stats, stats for each tube, and a peek at the next
+        ready, delayed, and buried job in each tube.
+        """
+        if not self.client:
+            self.logger.error("Beanstalkd client not initialized. Cannot get detailed monitoring view.")
+            return {"error": "Client not initialized"}
+
+        detailed_stats = {
+            'server_stats': None,
+            'tubes_details': {}
+        }
+
+        try:
+            detailed_stats['server_stats'] = self.client.stats()
+        except Exception as e:
+            self.logger.error(f"Failed to get server stats: {str(e)}")
+            detailed_stats['server_stats'] = {"error": str(e)}
+
+        try:
+            tubes = self.client.tubes()
+        except Exception as e:
+            self.logger.error(f"Failed to list tubes: {str(e)}")
+            detailed_stats['error_listing_tubes'] = str(e)
+            return detailed_stats
+
+        for tube_name in tubes:
+            tube_info = {
+                'stats': None,
+                'peeked_ready_job': None,
+                'peeked_delayed_job': None,
+                'peeked_buried_job': None
+            }
+            try:
+                tube_info['stats'] = self.client.stats_tube(tube_name)
+            except Exception as e:
+                self.logger.error(f"Failed to get stats for tube {tube_name}: {str(e)}")
+                tube_info['stats'] = {"error": str(e)}
+
+            peek_methods = {
+                'peeked_ready_job': self.client.peek_ready,
+                'peeked_delayed_job': self.client.peek_delayed,
+                'peeked_buried_job': self.client.peek_buried
+            }
+
+            for job_state_key, peek_method in peek_methods.items():
+                try:
+                    # The peek methods in BeanstalkdClient already use the correct tube.
+                    job_object = peek_method(tube_name)
+                    if job_object:
+                        job_details = {'id': job_object.id, 'body': None, 'job_stats': None}
+                        try:
+                            # Ensure body is string before deserializing
+                            body_str = job_object.body
+                            if isinstance(body_str, bytes):
+                                body_str = body_str.decode('utf-8', errors='replace') # Handle potential decoding errors
+
+                            # Use _clean_job_data to avoid including internal attributes like '_job'
+                            deserialized_data = self.serializer.deserialize_job(body_str)
+                            job_details['body'] = self._clean_job_data(deserialized_data)
+                        except Exception as deserialize_e:
+                            self.logger.warning(f"Failed to deserialize job {job_object.id} in tube {tube_name} ({job_state_key}): {str(deserialize_e)}")
+                            job_details['body'] = {"error_deserializing": str(deserialize_e), "raw_body": body_str if 'body_str' in locals() else job_object.body}
+
+                        try:
+                            # Access stats directly from the underlying greenstalk connection stats_job
+                            if self.client.connection:
+                                job_details['job_stats'] = self.client.connection.stats_job(job_object.id)
+                            else:
+                                job_details['job_stats'] = {"error": "Client connection not available for job stats"}
+                        except Exception as job_stats_e:
+                            self.logger.warning(f"Failed to get stats for job {job_object.id} in tube {tube_name}: {str(job_stats_e)}")
+                            job_details['job_stats'] = {"error": str(job_stats_e)}
+                        tube_info[job_state_key] = job_details
+                except Exception as peek_e:
+                    self.logger.error(f"Failed to {job_state_key} for tube {tube_name}: {str(peek_e)}")
+                    tube_info[job_state_key] = {"error": str(peek_e)}
+
+            detailed_stats['tubes_details'][tube_name] = tube_info
+
+        return detailed_stats
+
     def close(self):
         """Close the client connection"""
         if self.client:

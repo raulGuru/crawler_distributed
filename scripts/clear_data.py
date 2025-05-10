@@ -6,7 +6,8 @@ import psutil
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from config.base_settings import DB_URI, QUEUE_HOST, QUEUE_PORT, QUEUE_TUBES, DATA_DIR, HTML_DIR, LOG_DIR
+from config.base_settings import DB_URI, QUEUE_HOST, QUEUE_PORT, QUEUE_TUBES as BASE_QUEUE_TUBES, DATA_DIR, HTML_DIR, LOG_DIR
+from config.parser_settings import ALL_PARSER_TASK_TYPES
 
 def clear_mongodb():
     """Clear all collections in the MongoDB database"""
@@ -34,10 +35,12 @@ def clear_beanstalkd():
         # Connect to Beanstalkd - greenstalk uses address instead of host/port
         client = greenstalk.Client((QUEUE_HOST, QUEUE_PORT))
 
-        # List of tubes to clear
-        tubes = QUEUE_TUBES
+        # Construct the full list of tubes to clear
+        parser_task_tubes = [f"htmlparser_{task_type}_tube" for task_type in ALL_PARSER_TASK_TYPES.keys()]
+        all_tubes_to_clear = list(set(BASE_QUEUE_TUBES + parser_task_tubes))
+        print(f"Targeting Beanstalkd tubes for clearing: {all_tubes_to_clear}")
 
-        for tube in tubes:
+        for tube in all_tubes_to_clear:
             try:
                 # Switch to the tube
                 client.use(tube)
@@ -49,14 +52,29 @@ def clear_beanstalkd():
                     try:
                         # Try to reserve a job with a timeout of 0 seconds
                         job = client.reserve(timeout=0)
-                        client.delete(job)
-                        jobs_cleared += 1
+                        if job:
+                            client.delete(job)
+                            jobs_cleared += 1
+                        else: # No more jobs in this tube
+                            break
                     except greenstalk.TimedOutError:
                         # No more jobs to reserve
                         break
+                    except greenstalk.NotFoundError: # Tube might be empty or just created
+                        print(f"Tube {tube} not found or empty during reserve, skipping.")
+                        break
+                    except Exception as e_reserve:
+                        print(f"Error processing job in tube {tube}: {str(e_reserve)}")
+                        break # For safety, break from this tube's loop
 
                 print(f"Cleared {jobs_cleared} jobs from tube {tube}")
+                try:
+                    client.ignore(tube)
+                except greenstalk.NotFoundError:
+                    pass
 
+            except greenstalk.NotFoundError:
+                print(f"Tube {tube} not found, skipping.")
             except Exception as e:
                 print(f"Error clearing tube {tube}: {str(e)}")
 

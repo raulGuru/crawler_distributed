@@ -11,7 +11,7 @@ import uuid
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION, BEANSTALKD_TTR
 from lib.storage.mongodb_client import MongoDBClient
 
 def setup_logging(domain):
@@ -121,9 +121,7 @@ def submit_crawl_job(args):
         job_data=job_data,
         tube=args.tube,
         priority=args.priority,
-        # ttr for crawl jobs? QueueManager.enqueue_job has a default ttr=60.
-        # If crawl jobs need a different TTR, it should be passed here.
-        ttr=getattr(args, 'ttr', 60)
+        ttr=getattr(args, 'ttr', BEANSTALKD_TTR)
     )
 
     # Insert or update job in MongoDB with crawl_status 'fresh' and job_id
