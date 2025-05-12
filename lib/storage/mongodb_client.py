@@ -1,4 +1,5 @@
 import logging
+import os
 import pymongo
 from pymongo.errors import ConnectionFailure, OperationFailure
 from urllib.parse import urlparse
@@ -9,8 +10,24 @@ class MongoDBClient:
     Wrapper for MongoDB client with connection pooling and error handling
     """
 
-    def __init__(self, uri='mongodb://localhost:27017/crawler', connect_timeout=5000, max_retries=3):
-        self.uri = uri
+    # Default MongoDB configuration using environment variables
+    MONGO_HOST = os.environ.get('MONGO_HOST', 'localhost')
+    MONGO_PORT = int(os.environ.get('MONGO_PORT', 27017))
+    MONGO_DB = os.environ.get('MONGO_DB', 'crawler_db')
+    MONGO_USER = os.environ.get('MONGO_USER', '')
+    MONGO_PASSWORD = os.environ.get('MONGO_PASSWORD', '')
+    MONGO_AUTH_SOURCE = os.environ.get('MONGO_AUTH_SOURCE', 'admin')
+
+    @classmethod
+    def build_uri(cls):
+        """Build MongoDB URI from environment variables"""
+        if cls.MONGO_USER and cls.MONGO_PASSWORD:
+            return f"mongodb://{cls.MONGO_USER}:{cls.MONGO_PASSWORD}@{cls.MONGO_HOST}:{cls.MONGO_PORT}/{cls.MONGO_DB}?authSource={cls.MONGO_AUTH_SOURCE}"
+        else:
+            return f"mongodb://{cls.MONGO_HOST}:{cls.MONGO_PORT}/{cls.MONGO_DB}"
+
+    def __init__(self, uri=None, connect_timeout=5000, max_retries=3):
+        self.uri = uri or self.build_uri()
         self.connect_timeout = connect_timeout
         self.max_retries = max_retries
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -25,7 +42,7 @@ class MongoDBClient:
             parsed_uri = urlparse(self.uri)
             db_name = parsed_uri.path.strip('/')
             if not db_name:
-                db_name = 'crawler'  # Default database name
+                db_name = self.MONGO_DB
 
             # Connect to MongoDB
             self.client = pymongo.MongoClient(

@@ -1,6 +1,7 @@
 import logging
+from datetime import datetime
 
-from config.base_settings import BEANSTALKD_CRAWL_TUBE
+from config.base_settings import BEANSTALKD_CRAWL_TUBE, BEANSTALKD_PARSE_TUBE, BEANSTALKD_MONITOR_TUBE, MONGO_CRAWL_JOB_COLLECTION
 from .beanstalkd_client import BeanstalkdClient
 from .job_serializer import JobSerializer
 
@@ -13,8 +14,8 @@ class QueueManager:
     # Default tube names
     DEFAULT_TUBES = {
         'crawl': BEANSTALKD_CRAWL_TUBE,
-        'parse': 'parse_jobs',
-        'monitor': 'monitor_jobs'
+        'parse': BEANSTALKD_PARSE_TUBE,
+        'monitor': BEANSTALKD_MONITOR_TUBE
     }
 
     # Default priorities (lower is higher priority)
@@ -198,6 +199,32 @@ class QueueManager:
         except Exception as e:
             self.logger.error(f"Failed to complete job {getattr(job_object, 'id', 'unknown')}: {str(e)}")
 
+    def touch_job(self, job_object):
+        """Touch a reserved job to extend its TTR. Expects a Beanstalkd job object."""
+        if not job_object or not (hasattr(job_object, 'id') and hasattr(job_object, 'body')):
+            # Check if it looks like a greenstalk job object
+            self.logger.error("Cannot touch job: job_object is missing or not a valid job object")
+            raise ValueError("job_object must be a valid Beanstalkd job object")
+        try:
+            self.client.touch(job_object) # Pass the full job object as BeanstalkdClient can handle it
+            self.logger.info(f"Touched job {job_object.id} via QueueManager.")
+        except Exception as e:
+            job_id = getattr(job_object, 'id', 'unknown')
+            self.logger.error(f"QueueManager failed to touch job {job_id}: {str(e)}")
+            raise
+
+    def get_job_stats(self, job_object) -> dict | None:
+        """Get stats for a job object. Expects a Beanstalkd job object."""
+        if not job_object or not (hasattr(job_object, 'id') and hasattr(job_object, 'body')):
+            self.logger.error("Cannot get job stats: job_object is missing or not a valid job object")
+            raise ValueError("job_object must be a valid Beanstalkd job object")
+        try:
+            return self.client.get_job_stats(job_object)
+        except Exception as e:
+            job_id = getattr(job_object, 'id', 'unknown')
+            self.logger.error(f"QueueManager failed to get stats for job {job_id}: {e}")
+            return None # Or raise
+
     def purge_completed_jobs(self, crawl_id=None):
         """
         Purge completed jobs from the queue
@@ -300,6 +327,37 @@ class QueueManager:
             )
         except Exception as e:
             self.logger.error(f"Failed to retry/release job {job_id}: {str(e)}")
+
+    def bury_job(self, job_object, job_data_dict, priority_str_or_int='normal'):
+        """Bury a job so it's not processed further without intervention. Expects a Beanstalkd job object."""
+        if not job_object or not (hasattr(job_object, 'id') and hasattr(job_object, 'body')):
+            self.logger.error("Cannot bury job: job_object is missing or not a valid job object")
+            raise ValueError("job_object must be a valid Beanstalkd job object")
+
+        numeric_priority = self._get_priority(priority_str_or_int)
+        job_id_to_bury = getattr(job_object, 'id', 'unknown')
+        mongodb_collection_name = job_data_dict.get('_meta', {}).get('mongo_collection', MONGO_CRAWL_JOB_COLLECTION)
+
+        try:
+            self.client.bury(job_object, priority=numeric_priority) # Pass the full job object
+            self.logger.info(f"Buried job {job_id_to_bury} with priority {numeric_priority}.")
+
+            # Update MongoDB status to 'buried' or similar
+            if job_data_dict and job_data_dict.get('crawl_id') and hasattr(self, 'mongodb_client') and self.mongodb_client:
+                self.logger.info(f"Attempting to update MongoDB status to 'buried' for crawl_id {job_data_dict.get('crawl_id')}")
+                self.mongodb_client.update_one(
+                    mongodb_collection_name, # Use actual collection name
+                    {'crawl_id': job_data_dict.get('crawl_id')},
+                    {'$set': {'crawl_status': 'buried_max_retries', 'updated_at': datetime.utcnow()}}
+                )
+                self.logger.info(f"Updated MongoDB status to 'buried_max_retries' for crawl_id {job_data_dict.get('crawl_id')}")
+            elif not (hasattr(self, 'mongodb_client') and self.mongodb_client):
+                self.logger.warning(f"MongoDB client not available in QueueManager, cannot update status for buried job {job_id_to_bury}.")
+
+        except Exception as e:
+            self.logger.error(f"QueueManager failed to bury job {job_id_to_bury}: {str(e)}")
+            # Decide if to re-raise or not. If burying fails, it's tricky.
+            raise
 
     def fail_job(self, job_object, job_data_dict, permanent=False):
         """

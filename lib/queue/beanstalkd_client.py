@@ -134,6 +134,20 @@ class BeanstalkdClient:
             self.logger.error(f"Failed to delete job {job_id}: {str(e)}")
             raise
 
+    def touch(self, job_or_job_id: any):
+        """Touch a job to extend its TTR. Accepts job object or job ID."""
+        self._ensure_connection()
+        job_id_to_touch = None
+        try:
+            job_id_to_touch = job_or_job_id.id if hasattr(job_or_job_id, 'id') and hasattr(job_or_job_id, 'body') else job_or_job_id
+            if not isinstance(job_id_to_touch, (int, str)): # Basic check for ID type
+                raise ValueError(f"Invalid job_id_to_touch type: {type(job_id_to_touch)}")
+            self.connection.touch(job_id_to_touch)
+            self.logger.debug(f"Touched job {job_id_to_touch}")
+        except Exception as e:
+            self.logger.error(f"Failed to touch job {job_id_to_touch if job_id_to_touch is not None else 'unknown'}: {str(e)}")
+            raise
+
     def release(self, job, priority=1000, delay=0):
         """Release a job back to the queue"""
         self._ensure_connection()
@@ -144,15 +158,37 @@ class BeanstalkdClient:
             self.logger.error(f"Failed to release job {job.id}: {str(e)}")
             raise
 
-    def bury(self, job, priority=1000):
-        """Bury a job"""
+    def bury(self, job_or_job_id: any, priority: int = 1000):
+        """Bury a job. Accepts job object or job ID."""
         self._ensure_connection()
+        job_id_to_bury = None
         try:
-            self.connection.bury(job.id, priority=priority)
-            self.logger.debug(f"Buried job {job.id} with priority {priority}")
+            job_id_to_bury = job_or_job_id.id if hasattr(job_or_job_id, 'id') and hasattr(job_or_job_id, 'body') else job_or_job_id
+            if not isinstance(job_id_to_bury, (int, str)): # Basic check for ID type
+                raise ValueError(f"Invalid job_id_to_bury type: {type(job_id_to_bury)}")
+            self.connection.bury(job_id_to_bury, priority=priority)
+            self.logger.debug(f"Buried job {job_id_to_bury} with priority {priority}")
         except Exception as e:
-            self.logger.error(f"Failed to bury job {job.id}: {str(e)}")
+            self.logger.error(f"Failed to bury job {job_id_to_bury if job_id_to_bury is not None else 'unknown'}: {str(e)}")
             raise
+
+    def get_job_stats(self, job_or_job_id: any) -> dict | None:
+        """Get statistics for a specific job. Accepts job object or job ID."""
+        self._ensure_connection()
+        job_id_to_stat = None
+        try:
+            job_id_to_stat = job_or_job_id.id if hasattr(job_or_job_id, 'id') and hasattr(job_or_job_id, 'body') else job_or_job_id
+            if not isinstance(job_id_to_stat, (int, str)): # Basic check for ID type
+                raise ValueError(f"Invalid job_id_to_stat type: {type(job_id_to_stat)}")
+            stats = self.connection.stats_job(job_id_to_stat)
+            self.logger.debug(f"Got stats for job {job_id_to_stat}: {stats}")
+            return stats
+        except greenstalk.NotFoundError:
+            self.logger.warning(f"Job {job_id_to_stat} not found when trying to get stats.")
+            return None # Or specific error
+        except Exception as e:
+            self.logger.error(f"Failed to get stats for job {job_id_to_stat if job_id_to_stat is not None else 'unknown'}: {str(e)}")
+            return None # Or re-raise
 
     def tubes(self):
         """List all tubes"""
