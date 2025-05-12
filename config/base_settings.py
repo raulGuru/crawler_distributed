@@ -27,15 +27,6 @@ for directory in [DATA_DIR, HTML_DIR, LOG_DIR]:
 LOG_LEVEL = logging.INFO
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
-# Database configuration
-DB_URI = os.environ.get('DB_URI', 'mongodb://localhost:27017/crawler')
-DB_NAME = 'crawler'
-
-# Queue configuration
-QUEUE_HOST = os.environ.get('QUEUE_HOST', 'localhost')
-QUEUE_PORT = int(os.environ.get('QUEUE_PORT', '11300'))
-QUEUE_TUBES = ['crawl_jobs', 'parse_jobs', 'monitor_jobs']
-
 # Worker script paths
 CRAWLER_JOB_LISTENER_PATH = os.path.join(PROJECT_ROOT, 'crawler', 'worker', 'crawl_job_listener.py')
 PARSE_WORKER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'job_dispatcher.py')
@@ -69,13 +60,14 @@ MONGO_URI = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/
 MONGO_CRAWL_JOB_COLLECTION = 'crawl_jobs'
 MONGO_PARSE_JOB_COLLECTION = 'parse_jobs'
 
-# Beanstalkd configuration
-BEANSTALKD_HOST = os.environ.get('BEANSTALKD_HOST', 'localhost')
-BEANSTALKD_PORT = int(os.environ.get('BEANSTALKD_PORT', 11300))
-BEANSTALKD_CRAWL_TUBE = os.environ.get('BEANSTALKD_CRAWL_TUBE', 'crawl_jobs')
-BEANSTALKD_PARSE_TUBE = os.environ.get('BEANSTALKD_PARSE_TUBE', 'parse_jobs')
-BEANSTALKD_MONITOR_TUBE = os.environ.get('BEANSTALKD_MONITOR_TUBE', 'monitor_jobs')
-BEANSTALKD_TTR = int(os.environ.get('BEANSTALKD_TTR', 900))
+# Beanstalkd queue configuration
+QUEUE_HOST = os.environ.get('QUEUE_HOST', 'localhost')
+QUEUE_PORT = int(os.environ.get('QUEUE_PORT', '11300'))
+QUEUE_TUBES = ['crawl_jobs', 'parse_jobs', 'monitor_jobs']
+QUEUE_CRAWL_TUBE = os.environ.get('QUEUE_CRAWL_TUBE', 'crawl_jobs')
+QUEUE_PARSE_TUBE = os.environ.get('QUEUE_PARSE_TUBE', 'parse_jobs')
+QUEUE_MONITOR_TUBE = os.environ.get('QUEUE_MONITOR_TUBE', 'monitor_jobs')
+QUEUE_TTR = int(os.environ.get('QUEUE_TTR', 900))
 
 # General settings
 HOSTNAME = socket.gethostname()

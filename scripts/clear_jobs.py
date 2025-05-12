@@ -6,7 +6,7 @@ from datetime import datetime
 import argparse
 
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, BEANSTALKD_CRAWL_TUBE
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, QUEUE_CRAWL_TUBE
 
 def setup_logging():
     """Set up logging"""
@@ -30,8 +30,8 @@ def list_jobs(queue_manager):
     """List the next ready job in the specified tube (Beanstalkd limitation)"""
     logger = logging.getLogger("clear_jobs")
     logger.info("Listing the next ready job in the 'crawl_jobs' tube...")
-    queue_manager.client.use_tube(BEANSTALKD_CRAWL_TUBE)
-    job = queue_manager.client.peek_ready(BEANSTALKD_CRAWL_TUBE)
+    queue_manager.client.use_tube(QUEUE_CRAWL_TUBE)
+    job = queue_manager.client.peek_ready(QUEUE_CRAWL_TUBE)
     if job:
         job_data = queue_manager.serializer.deserialize_job(job.body)
         logger.info(f"Job ID: {job.id}, Data: {job_data}")
@@ -42,8 +42,8 @@ def clean_jobs(queue_manager):
     """Clean/delete all jobs from the specified tube"""
     logger = logging.getLogger("clear_jobs")
     logger.info("Cleaning all jobs from the 'crawl_jobs' tube...")
-    queue_manager.client.use_tube(BEANSTALKD_CRAWL_TUBE)
-    queue_manager.client.watch_tube(BEANSTALKD_CRAWL_TUBE)
+    queue_manager.client.use_tube(QUEUE_CRAWL_TUBE)
+    queue_manager.client.watch_tube(QUEUE_CRAWL_TUBE)
 
     while True:
         job = queue_manager.client.reserve(timeout=0)
@@ -56,8 +56,8 @@ def clean_job_by_id(queue_manager, job_id):
     """Clean/delete a specific job by ID"""
     logger = logging.getLogger("clear_jobs")
     logger.info(f"Cleaning job with ID: {job_id} from the 'crawl_jobs' tube...")
-    queue_manager.client.use_tube(BEANSTALKD_CRAWL_TUBE)
-    queue_manager.client.watch_tube(BEANSTALKD_CRAWL_TUBE)
+    queue_manager.client.use_tube(QUEUE_CRAWL_TUBE)
+    queue_manager.client.watch_tube(QUEUE_CRAWL_TUBE)
 
     job = queue_manager.client.reserve(timeout=0)
     if job and job.jid == job_id:

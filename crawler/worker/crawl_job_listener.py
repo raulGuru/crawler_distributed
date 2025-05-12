@@ -17,8 +17,8 @@ from config.base_settings import (
     LOG_DIR,
     SCRAPY_PATH,
     MONGO_CRAWL_JOB_COLLECTION,
-    BEANSTALKD_CRAWL_TUBE,
-    BEANSTALKD_TTR,
+    QUEUE_CRAWL_TUBE,
+    QUEUE_TTR,
 )
 from lib.storage.mongodb_client import MongoDBClient
 from crawler.worker.crawl_job_processor import CrawlJobProcessor
@@ -93,7 +93,7 @@ class CrawlJobListener:
 
     def _reserve_job(self, tubes=None, timeout=None):
         if tubes is None:
-            tubes = [BEANSTALKD_CRAWL_TUBE]
+            tubes = [QUEUE_CRAWL_TUBE]
         try:
             job_id, job_data, job_obj = self.queue_manager.dequeue_job(
                 tubes=tubes, timeout=timeout
@@ -120,7 +120,7 @@ class CrawlJobListener:
 
         TOUCH_INTERVAL_FACTOR = 0.5
         DEFAULT_JOB_TTR = getattr(
-            self.queue_manager.client.connection, "default_ttr", BEANSTALKD_TTR
+            self.queue_manager.client.connection, "default_ttr", QUEUE_TTR
         )
         MIN_TTR_FOR_TOUCHING = max(30, DEFAULT_JOB_TTR * 0.2)
 
@@ -134,7 +134,7 @@ class CrawlJobListener:
             toucher_active_event = threading.Event()
 
             try:
-                tubes = [BEANSTALKD_CRAWL_TUBE]
+                tubes = [QUEUE_CRAWL_TUBE]
                 job_id, job_data, job_obj = self._reserve_job(tubes=tubes, timeout=5)
 
                 if job_id and job_data and job_obj:

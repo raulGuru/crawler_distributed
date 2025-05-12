@@ -11,7 +11,7 @@ import uuid
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION, BEANSTALKD_TTR
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION, QUEUE_TTR
 from lib.storage.mongodb_client import MongoDBClient
 
 def setup_logging(domain):
@@ -136,7 +136,7 @@ def submit_crawl_job(args):
             job_data=job_data_for_beanstalkd,
             tube=args.tube,
             priority=args.priority,
-            ttr=getattr(args, 'ttr', BEANSTALKD_TTR)
+            ttr=getattr(args, 'ttr', QUEUE_TTR)
         )
     except Exception as e_enqueue:
         logger.error(f"Failed to enqueue job for {current_domain} (crawl_id={final_crawl_id}): {e_enqueue}")
@@ -196,7 +196,7 @@ def main():
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Beanstalkd port')
     parser.add_argument('--tube', default=MONGO_CRAWL_JOB_COLLECTION, help='Beanstalkd tube (default: crawl_jobs)')
     parser.add_argument('--priority', default='normal', help='Job priority (high, normal, low)')
-    parser.add_argument('--ttr', type=int, default=None, help=f'Beanstalkd Time-To-Run in seconds (default: {BEANSTALKD_TTR} from .env)')
+    parser.add_argument('--ttr', type=int, default=None, help=f'Beanstalkd Time-To-Run in seconds (default: {QUEUE_TTR} from .env)')
 
     args = parser.parse_args()
 
@@ -212,7 +212,7 @@ def main():
         parser.error("Either --domain or --url is required.")
 
     if args.ttr is None:
-        args.ttr = BEANSTALKD_TTR
+        args.ttr = QUEUE_TTR
 
     setup_logging(domain_for_log if domain_for_log else "unknown_submission")
 

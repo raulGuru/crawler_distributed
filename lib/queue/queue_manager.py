@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-from config.base_settings import BEANSTALKD_CRAWL_TUBE, BEANSTALKD_PARSE_TUBE, BEANSTALKD_MONITOR_TUBE, MONGO_CRAWL_JOB_COLLECTION
+from config.base_settings import QUEUE_CRAWL_TUBE, QUEUE_PARSE_TUBE, QUEUE_MONITOR_TUBE, MONGO_CRAWL_JOB_COLLECTION
 from .beanstalkd_client import BeanstalkdClient
 from .job_serializer import JobSerializer
 
@@ -13,9 +13,9 @@ class QueueManager:
 
     # Default tube names
     DEFAULT_TUBES = {
-        'crawl': BEANSTALKD_CRAWL_TUBE,
-        'parse': BEANSTALKD_PARSE_TUBE,
-        'monitor': BEANSTALKD_MONITOR_TUBE
+        'crawl': QUEUE_CRAWL_TUBE,
+        'parse': QUEUE_PARSE_TUBE,
+        'monitor': QUEUE_MONITOR_TUBE
     }
 
     # Default priorities (lower is higher priority)

@@ -22,9 +22,9 @@ class ParserTriggerPipeline:
     It calls parser/dispatch/job_dispatcher.py to handle the actual Beanstalkd interactions.
     """
 
-    def __init__(self, beanstalkd_host, beanstalkd_port, priority, ttr):
-        self.beanstalkd_host = beanstalkd_host
-        self.beanstalkd_port = beanstalkd_port
+    def __init__(self, queue_host, queue_port, priority, ttr):
+        self.queue_host = queue_host
+        self.queue_port = queue_port
         self.priority = priority
         self.ttr = ttr
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -35,8 +35,8 @@ class ParserTriggerPipeline:
     def from_crawler(cls, crawler):
         """Get settings from crawler"""
         pipeline = cls(
-            beanstalkd_host=crawler.settings.get('BEANSTALKD_HOST', 'localhost'),
-            beanstalkd_port=crawler.settings.get('BEANSTALKD_PORT', 11300),
+            queue_host=crawler.settings.get('QUEUE_HOST', 'localhost'),
+            queue_port=crawler.settings.get('QUEUE_PORT', 11300),
             priority=crawler.settings.get('PARSE_JOB_PRIORITY', 100),
             ttr=crawler.settings.get('PARSE_JOB_TTR', 180)
         )
