@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 
 from lib.utils.logging_utils import LoggingUtils
 from lib.queue.beanstalkd_client import BeanstalkdClient
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, DB_URI, LOG_DIR
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, MONGO_URI, LOG_DIR
 
 
 class HealthCheck:
@@ -109,7 +109,7 @@ class HealthCheck:
 
         return result
 
-    def check_mongodb(self, uri=DB_URI, timeout=5000):
+    def check_mongodb(self, uri=MONGO_URI, timeout=5000):
         """
         Check if MongoDB is accessible and operational
 

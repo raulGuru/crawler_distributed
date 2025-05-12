@@ -15,8 +15,8 @@ from lib.storage.mongodb_client import MongoDBClient
 from lib.utils.logging_utils import LoggingUtils
 from lib.utils.health_check import HealthCheck
 from config.base_settings import (
-    QUEUE_HOST, QUEUE_PORT, DB_URI, LOG_DIR,
-    CRAWLER_JOB_LISTENER_PATH, MONITOR_WORKER_PATH,
+    QUEUE_HOST, QUEUE_PORT, MONGO_URI, LOG_DIR,
+    CRAWLER_JOB_LISTENER_PATH,
     PROJECT_ROOT
 )
 from config.parser_settings import (
@@ -47,7 +47,7 @@ class IntegrationService:
         # }
     }
 
-    def __init__(self, queue_host: str = QUEUE_HOST, queue_port: int = QUEUE_PORT, db_uri: str = DB_URI,
+    def __init__(self, queue_host: str = QUEUE_HOST, queue_port: int = QUEUE_PORT, mongo_uri: str = MONGO_URI,
                  health_check_interval: int = 60) -> None:
         """
         Initialize the integration service
@@ -55,12 +55,12 @@ class IntegrationService:
         Args:
             queue_host (str): Beanstalkd host
             queue_port (int): Beanstalkd port
-            db_uri (str): MongoDB URI
+            mongo_uri (str): MongoDB URI
             health_check_interval (int): Health check interval in seconds
         """
         self.queue_host = queue_host
         self.queue_port = queue_port
-        self.db_uri = db_uri
+        self.mongo_uri = mongo_uri
         self.health_check_interval = health_check_interval
         self.logger = LoggingUtils.setup_logger('integration_service')
         self.mongodb_client = None
@@ -78,7 +78,7 @@ class IntegrationService:
             log_dir=LOG_DIR,
             queue_host=self.queue_host,
             queue_port=self.queue_port,
-            db_uri=self.db_uri
+            db_uri=self.mongo_uri
         )
         signal.signal(signal.SIGINT, self._handle_signal)
         signal.signal(signal.SIGTERM, self._handle_signal)
@@ -125,7 +125,7 @@ class IntegrationService:
             self.logger.info("Initializing components")
 
             # Initialize MongoDB client
-            self.mongodb_client = MongoDBClient(uri=self.db_uri)
+            self.mongodb_client = MongoDBClient()
 
             # Initialize queue manager
             self.queue_manager = QueueManager(host=self.queue_host, port=self.queue_port)
@@ -151,7 +151,7 @@ class IntegrationService:
         )
 
         # Check MongoDB
-        mongodb_check = self.health_check.check_mongodb(uri=self.db_uri)
+        mongodb_check = self.health_check.check_mongodb()
 
         # Check system resources
         system_check = self.health_check.check_system()
@@ -322,7 +322,6 @@ def main():
     parser = argparse.ArgumentParser(description='Integration service for distributed crawler')
     parser.add_argument('--queue-host', default=QUEUE_HOST, help='Beanstalkd host')
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Beanstalkd port')
-    parser.add_argument('--db-uri', default=DB_URI, help='MongoDB URI')
     parser.add_argument('--health-check-interval', type=int, default=60, help='Health check interval in seconds')
 
     args = parser.parse_args()
@@ -331,7 +330,6 @@ def main():
         service = IntegrationService(
             queue_host=args.queue_host,
             queue_port=args.queue_port,
-            db_uri=args.db_uri,
             health_check_interval=args.health_check_interval
         )
 

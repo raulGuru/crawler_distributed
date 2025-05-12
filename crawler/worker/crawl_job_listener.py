@@ -16,7 +16,6 @@ from config.base_settings import (
     QUEUE_PORT,
     LOG_DIR,
     SCRAPY_PATH,
-    DB_URI,
     MONGO_CRAWL_JOB_COLLECTION,
     BEANSTALKD_CRAWL_TUBE,
     BEANSTALKD_TTR,
@@ -78,7 +77,7 @@ class CrawlJobListener:
             self.queue_manager = QueueManager(
                 host=self.queue_host, port=self.queue_port
             )
-            self.mongodb_client = MongoDBClient(uri=DB_URI)
+            self.mongodb_client = MongoDBClient()
             self.crawl_job_processor = CrawlJobProcessor(
                 logger=self.logger,
                 mongodb_client=self.mongodb_client,

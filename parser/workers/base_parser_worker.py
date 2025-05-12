@@ -2,7 +2,6 @@ import os
 import sys
 import signal
 import time
-import json
 import abc
 import logging
 import pymongo
@@ -19,7 +18,7 @@ from lib.queue.queue_manager import QueueManager
 from lib.storage.mongodb_client import MongoDBClient
 from lib.utils.logging_utils import LoggingUtils
 from lib.utils.extractor_base import BaseExtractor
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, DB_URI, LOG_DIR
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR
 
 
 class RetryableError(Exception):
@@ -45,7 +44,7 @@ class BaseParserWorker(abc.ABC):
     - Common extraction patterns.
     """
 
-    def __init__(self, tube_name: str, task_type: str, instance_id: int = 0, parser_type: str = "lxml"):
+    def __init__(self, tube_name: str, task_type: str, instance_id: int = 0, parser_type: str = "html.parser"):
         """
         Initialize the BaseParserWorker.
 
@@ -53,7 +52,7 @@ class BaseParserWorker(abc.ABC):
             tube_name (str): The Beanstalkd tube name this worker will listen to.
             task_type (str): A string identifying the type of task this worker handles.
             instance_id (int): The instance ID of this worker.
-            parser_type (str): BeautifulSoup parser type (default: lxml).
+            parser_type (str): BeautifulSoup parser type (default: html.parser).
         """
         self.tube_name = tube_name
         self.task_type = task_type
@@ -63,7 +62,7 @@ class BaseParserWorker(abc.ABC):
 
         self._setup_logging()
 
-        self.mongodb_client = MongoDBClient(uri=DB_URI)
+        self.mongodb_client = MongoDBClient()
         self.queue_manager = QueueManager(host=QUEUE_HOST, port=QUEUE_PORT)
         # Initialize the base extractor
         self.extractor = BaseExtractor()
@@ -165,7 +164,7 @@ class BaseParserWorker(abc.ABC):
                 update=update_payload,
                 upsert=True,
             )
-            if db_result.modified_count == 0 and not db_result.upserted_id:
+            if db_result['modified_count'] == 0 and not db_result['upserted_id']:
                 self.logger.warning(f"[{self.worker_name}] No document modified for {doc_id_str}")
         except pymongo.errors.DuplicateKeyError:
             raise NonRetryableError(f"[{self.worker_name}] Duplicate key error for {doc_id_str}")

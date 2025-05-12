@@ -6,13 +6,13 @@ import psutil
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from config.base_settings import DB_URI, QUEUE_HOST, QUEUE_PORT, QUEUE_TUBES as BASE_QUEUE_TUBES, DATA_DIR, HTML_DIR, LOG_DIR
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, QUEUE_TUBES as BASE_QUEUE_TUBES, DATA_DIR, HTML_DIR, LOG_DIR, MONGO_URI
 from config.parser_settings import ALL_PARSER_TASK_TYPES
 
 def clear_mongodb():
     """Clear all collections in the MongoDB database"""
     print("Clearing MongoDB collections...")
-    client = MongoClient(DB_URI)
+    client = MongoClient(MONGO_URI)
     db = client.get_database()
 
     # Print collections before clearing
