@@ -173,6 +173,7 @@ def submit_crawl_job(args):
     queue_manager.close()
 
     logger.info(f"Successfully submitted job for domain: {current_domain}")
+    logger.info(f"Beanstalkd Job ID: {beanstalkd_job_id}, Crawl ID: {final_crawl_id}")
     print(f"Submitting job with the following parameters for crawl_id: {final_crawl_id}, beanstalkd_job_id: {beanstalkd_job_id}")
     for key, value in job_data_for_beanstalkd.items():
         if key not in ['submitted_at', '_job']:
@@ -195,7 +196,7 @@ def main():
     parser.add_argument('--queue-host', default=QUEUE_HOST, help='Beanstalkd host')
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Beanstalkd port')
     parser.add_argument('--tube', default=MONGO_CRAWL_JOB_COLLECTION, help='Beanstalkd tube (default: crawl_jobs)')
-    parser.add_argument('--priority', default='normal', help='Job priority (high, normal, low)')
+    parser.add_argument('--priority', default='high', help='Job priority (high, normal, low)')
     parser.add_argument('--ttr', type=int, default=None, help=f'Beanstalkd Time-To-Run in seconds (default: {QUEUE_TTR} from .env)')
 
     args = parser.parse_args()

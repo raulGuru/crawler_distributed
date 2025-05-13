@@ -179,11 +179,17 @@ class IntegrationService:
 
     def _start_all_workers(self) -> bool:
         """Start all configured workers using WorkerManager."""
-        return self.worker_manager.start_all_workers()
+        self.logger.info("Attempting to start all workers via WorkerManager...")
+        result = self.worker_manager.start_all_workers()
+        self.logger.info(f"WorkerManager.start_all_workers() returned: {result}")
+        return result
 
     def _check_worker_health(self) -> bool:
         """Check health of all worker processes using WorkerManager."""
-        return self.worker_manager.check_worker_health()
+        self.logger.debug("Attempting to check worker health via WorkerManager...")
+        result = self.worker_manager.check_worker_health()
+        self.logger.debug(f"WorkerManager.check_worker_health() returned: {result}")
+        return result
 
     def _shutdown_worker(self, worker_name: str, process: subprocess.Popen, timeout: int = 30) -> bool:
         """Shutdown a worker process using WorkerManager."""
@@ -191,20 +197,28 @@ class IntegrationService:
 
     def _shutdown_all_workers(self) -> None:
         """Shutdown all worker processes using WorkerManager."""
+        self.logger.info("Attempting to shutdown all workers via WorkerManager...")
         self.worker_manager.shutdown_all_workers()
+        self.logger.info("WorkerManager.shutdown_all_workers() completed.")
 
     def _run_health_check_thread(self) -> None:
         """Run periodic health checks in a separate thread"""
+        self.logger.info("Health check thread started.")
         while self.running and not self.shutdown_requested:
             try:
+                self.logger.debug("Health check thread: New cycle started.")
                 # Run health check
-                health_report = self.health_check.run_all_checks()
+                managed_worker_names = list(self.workers.keys())
+                health_report = self.health_check.run_all_checks(worker_names_to_check=managed_worker_names)
 
                 # Save health report
                 self.health_check.save_health_report(health_report)
+                self.logger.debug("Health check thread: Health report saved.")
 
                 # Check worker health
+                self.logger.info("Health check thread: Calling _check_worker_health().")
                 self._check_worker_health()
+                self.logger.info("Health check thread: _check_worker_health() completed.")
 
                 # Wait for next check
                 for _ in range(self.health_check_interval):
@@ -216,6 +230,7 @@ class IntegrationService:
                 self.logger.error(f"Error in health check thread: {str(e)}")
                 LoggingUtils.log_exception(self.logger, e, "Health check error")
                 time.sleep(10)  # Sleep briefly to avoid tight loop on persistent errors
+        self.logger.info("Health check thread finished.")
 
     def _cleanup(self) -> None:
         """Cleanup resources"""
@@ -277,6 +292,7 @@ class IntegrationService:
 
         # Main loop - wait for shutdown signal
         try:
+            self.logger.info("Integration service main loop started. Waiting for shutdown signal.")
             while self.running and not self.shutdown_requested:
                 time.sleep(1)
 

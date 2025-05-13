@@ -134,19 +134,37 @@ class BeanstalkdClient:
             self.logger.error(f"Failed to delete job {job_id}: {str(e)}")
             raise
 
-    def touch(self, job_or_job_id: any):
-        """Touch a job to extend its TTR. Accepts job object or job ID."""
-        self._ensure_connection()
-        job_id_to_touch = None
+    def touch(self, job_obj_or_id):
+        """Touch a job to extend its TTR. Accepts Job object or job ID."""
+        job_id_for_logging = getattr(job_obj_or_id, 'id', job_obj_or_id)
         try:
-            job_id_to_touch = job_or_job_id.id if hasattr(job_or_job_id, 'id') and hasattr(job_or_job_id, 'body') else job_or_job_id
-            if not isinstance(job_id_to_touch, (int, str)): # Basic check for ID type
-                raise ValueError(f"Invalid job_id_to_touch type: {type(job_id_to_touch)}")
-            self.connection.touch(job_id_to_touch)
-            self.logger.debug(f"Touched job {job_id_to_touch}")
+            # greenstalk.Client.touch() can accept either a Job object or an int ID.
+            # Let's prefer passing the Job object if that's what we received,
+            # otherwise, pass the ID.
+            arg_to_touch = job_obj_or_id # Assume it's a Job object or an ID that greenstalk can handle
+            self.logger.debug(f"BeanstalkdClient: Calling self.connection.touch with argument of type {type(arg_to_touch)} (job_id_for_logging: {job_id_for_logging})")
+            self.connection.touch(arg_to_touch)
+            self.logger.debug(f"Touched job {job_id_for_logging}")
+        except greenstalk.UnknownResponseError as e:
+            # This can happen if the job TTRs and is deleted before touch completes
+            self.logger.warning(f"Failed to touch job {job_id_for_logging} (may have expired or been deleted): {e}")
+            # Do not re-raise, allow main process to discover job is gone if needed
+        except AttributeError as ae:
+            # Check if the AttributeError is specifically "'int' object has no attribute 'id'"
+            # and originates from the greenstalk call.
+            if "'int' object has no attribute 'id'" in str(ae):
+                self.logger.error(
+                    f"BeanstalkdClient: Encountered AttributeError ('{str(ae)}') from greenstalk.connection.touch({job_id_for_logging}). "
+                    f"This may indicate an issue within the greenstalk library. Job will not be touched."
+                )
+                # Do NOT re-raise this specific AttributeError to allow the toucher thread to continue attempting.
+                # However, the touch did NOT succeed.
+            else:
+                self.logger.error(f"BeanstalkdClient: General AttributeError touching job {job_id_for_logging}: {repr(ae)}")
+                raise # Re-raise other AttributeErrors
         except Exception as e:
-            self.logger.error(f"Failed to touch job {job_id_to_touch if job_id_to_touch is not None else 'unknown'}: {str(e)}")
-            raise
+            self.logger.error(f"BeanstalkdClient: General error touching job {job_id_for_logging}: {repr(e)}")
+            raise # Re-raise other errors
 
     def release(self, job, priority=1000, delay=0):
         """Release a job back to the queue"""
@@ -172,12 +190,12 @@ class BeanstalkdClient:
             self.logger.error(f"Failed to bury job {job_id_to_bury if job_id_to_bury is not None else 'unknown'}: {str(e)}")
             raise
 
-    def get_job_stats(self, job_or_job_id: any) -> dict | None:
+    def get_job_stats(self, job_obj_or_id) -> dict | None:
         """Get statistics for a specific job. Accepts job object or job ID."""
         self._ensure_connection()
         job_id_to_stat = None
         try:
-            job_id_to_stat = job_or_job_id.id if hasattr(job_or_job_id, 'id') and hasattr(job_or_job_id, 'body') else job_or_job_id
+            job_id_to_stat = job_obj_or_id.id if hasattr(job_obj_or_id, 'id') and hasattr(job_obj_or_id, 'body') else job_obj_or_id
             if not isinstance(job_id_to_stat, (int, str)): # Basic check for ID type
                 raise ValueError(f"Invalid job_id_to_stat type: {type(job_id_to_stat)}")
             stats = self.connection.stats_job(job_id_to_stat)

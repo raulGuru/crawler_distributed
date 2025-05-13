@@ -44,6 +44,8 @@ class CrawlJobListener:
         signal.signal(signal.SIGINT, self._handle_signal)
         signal.signal(signal.SIGTERM, self._handle_signal)
         self.max_retries = 3
+        self.toucher_thread = None
+        self.toucher_active_event = threading.Event()
 
     def _setup_logging(self):
         logger = logging.getLogger(f"CrawlJobListener_{self.instance_id}")
@@ -118,11 +120,11 @@ class CrawlJobListener:
             return False
         self.running = True
 
-        TOUCH_INTERVAL_FACTOR = 0.5
         DEFAULT_JOB_TTR = getattr(
             self.queue_manager.client.connection, "default_ttr", QUEUE_TTR
         )
-        MIN_TTR_FOR_TOUCHING = max(30, DEFAULT_JOB_TTR * 0.2)
+        MIN_TTR_FOR_TOUCHING = max(60, int(DEFAULT_JOB_TTR * 0.2))
+        TOUCH_INTERVAL_FACTOR = 0.4
 
         while self.running and not self.shutdown_requested:
             job_id = None
@@ -130,19 +132,20 @@ class CrawlJobListener:
             job_obj = None
             crawl_id = "N/A_BEFORE_DEQUEUE"
 
-            toucher_thread = None
-            toucher_active_event = threading.Event()
-
             try:
                 tubes = [QUEUE_CRAWL_TUBE]
+                self.logger.info(f"Attempting to reserve job from tubes: {tubes} with timeout 5s.")
                 job_id, job_data, job_obj = self._reserve_job(tubes=tubes, timeout=5)
 
                 if job_id and job_data and job_obj:
+                    # Job successfully reserved from Beanstalkd
+                    self.current_job_id = job_id # Store current job ID for context
                     if "crawl_id" not in job_data or not job_data["crawl_id"]:
                         job_data["crawl_id"] = str(uuid.uuid4())
+                        self.logger.warning(f"Job {job_id} was missing crawl_id, generated: {job_data['crawl_id']}")
                     crawl_id = job_data["crawl_id"]
                     self.logger.info(
-                        f"DEQUEUED job {job_id} (crawl_id={crawl_id}). Job data keys: {list(job_data.keys())}"
+                        f"RESERVED job {job_id} (crawl_id={crawl_id}) from Beanstalkd. Data keys: {list(job_data.keys())}"
                     )
 
                     job_stats_for_ttr = self.queue_manager.get_job_stats(job_obj)
@@ -152,7 +155,7 @@ class CrawlJobListener:
                         else DEFAULT_JOB_TTR
                     )
                     self.logger.info(
-                        f"Job {job_id} has TTR: {current_job_actual_ttr}s (from stats or default). Min TTR for touching: {MIN_TTR_FOR_TOUCHING}s."
+                        f"Job {job_id} has TTR: {current_job_actual_ttr}s (from stats or default)."
                     )
 
                     def _touch_job_periodically(
@@ -165,11 +168,14 @@ class CrawlJobListener:
                     ):
                         if not initial_ttr or initial_ttr < MIN_TTR_FOR_TOUCHING:
                             parent_logger.info(
-                                f"Job {job_ident} TTR ({initial_ttr}s) too short or undefined, not starting toucher."
+                                f"Job {job_ident} TTR ({initial_ttr}s) too short (less than {MIN_TTR_FOR_TOUCHING}s) or undefined, not starting toucher."
                             )
                             return
 
-                        touch_interval = max(10, initial_ttr * TOUCH_INTERVAL_FACTOR)
+                        touch_interval = max(15.0, initial_ttr * TOUCH_INTERVAL_FACTOR)
+                        if initial_ttr - touch_interval < 15 :
+                            touch_interval = max(15.0, initial_ttr - 15.0)
+
                         parent_logger.info(
                             f"Starting toucher for job {job_ident} with TTR {initial_ttr}s, touch interval {touch_interval:.2f}s."
                         )
@@ -198,23 +204,24 @@ class CrawlJobListener:
                         )
 
                     if current_job_actual_ttr >= MIN_TTR_FOR_TOUCHING:
-                        toucher_active_event.clear()
-                        toucher_thread = threading.Thread(
+                        self.toucher_active_event.clear()
+                        self.toucher_thread = threading.Thread(
                             target=_touch_job_periodically,
                             args=(
                                 job_obj,
                                 current_job_actual_ttr,
-                                toucher_active_event,
+                                self.toucher_active_event,
                                 self.queue_manager,
                                 self.logger,
                                 f"{job_id}/{crawl_id}",
                             ),
                         )
-                        toucher_thread.daemon = True
-                        toucher_thread.start()
+                        self.toucher_thread.daemon = True
+                        self.toucher_thread.start()
 
                     success = False
                     try:
+                        self.logger.info(f"Updating MongoDB for crawl_id {crawl_id}: status='crawling', job_id={job_id}")
                         self.mongodb_client.update_one(
                             MONGO_CRAWL_JOB_COLLECTION,
                             {"crawl_id": crawl_id},
@@ -228,15 +235,17 @@ class CrawlJobListener:
                             upsert=True,
                         )
                         self.logger.info(
-                            f"Set crawl_status to 'crawling' for crawl_id {crawl_id}."
+                            f"MongoDB update complete for {crawl_id}. Passing job to CrawlJobProcessor."
                         )
                         success = self.crawl_job_processor.process_job(job_id, job_data)
 
                         if success:
                             self.logger.info(
-                                f"Job {job_id} (crawl_id={crawl_id}) processed successfully by CrawlJobProcessor. Completing job."
+                                f"CrawlJobProcessor reported SUCCESS for job {job_id} (crawl_id={crawl_id})."
                             )
+                            self.logger.info(f"Attempting to COMPLETE job {job_id} (crawl_id={crawl_id}) in Beanstalkd.")
                             self.queue_manager.complete_job(job_obj, job_data)
+                            self.logger.info(f"SUCCESSFULLY COMPLETED job {job_id} (crawl_id={crawl_id}) in Beanstalkd.")
                         else:
                             job_stats_on_failure = self.queue_manager.get_job_stats(
                                 job_obj
@@ -247,27 +256,32 @@ class CrawlJobListener:
                                 else 0
                             )
                             self.logger.warning(
-                                f"CrawlJobProcessor indicated failure for job {job_id} (crawl_id={crawl_id}). Current releases: {releases_count}."
+                                f"CrawlJobProcessor reported FAILURE for job {job_id} (crawl_id={crawl_id}). Current Beanstalkd releases: {releases_count}. Listener max_retries: {self.max_retries}."
                             )
 
                             if releases_count < self.max_retries:
+                                retry_delay = 60
                                 self.logger.info(
-                                    f"Retrying job {job_id} (crawl_id={crawl_id}) via Beanstalkd with 60s delay. Attempt {releases_count + 1}/{self.max_retries + 1}."
+                                    f"Preparing to RETRY job {job_id} (crawl_id={crawl_id}) via Beanstalkd release with delay {retry_delay}s. Attempt based on releases: {releases_count + 1}/{self.max_retries + 1}."
                                 )
                                 self.queue_manager.retry_job(
-                                    job_obj, job_data, delay=60
+                                    job_obj, job_data, delay=retry_delay
                                 )
+                                self.logger.info(f"SUCCESSFULLY RELEASED job {job_id} (crawl_id={crawl_id}) for retry.")
                             else:
                                 self.logger.error(
-                                    f"Job {job_id} (crawl_id={crawl_id}) failed after {releases_count} releases (max {self.max_retries} allowed). Burying job."
+                                    f"Job {job_id} (crawl_id={crawl_id}) failed after {releases_count} releases (max {self.max_retries} allowed by listener). Preparing to BURY job."
                                 )
                                 self.queue_manager.bury_job(job_obj, job_data)
+                                self.logger.info(f"SUCCESSFULLY BURIED job {job_id} (crawl_id={crawl_id}).")
 
                     except Exception as processing_exception:
                         self.logger.error(
-                            f"EXCEPTION during job processing for job {job_id} (crawl_id={crawl_id}): {processing_exception}"
+                            f"EXCEPTION during job processing or MongoDB update for job {job_id} (crawl_id={crawl_id}): {processing_exception}",
+                            exc_info=True # Add exc_info for stack trace
                         )
                         try:
+                            self.logger.info(f"Attempting to update MongoDB for {crawl_id} to status='failed_exception' due to: {processing_exception}")
                             self.mongodb_client.update_one(
                                 MONGO_CRAWL_JOB_COLLECTION,
                                 {"crawl_id": crawl_id},
@@ -294,55 +308,57 @@ class CrawlJobListener:
                                 else 0
                             )
                             if releases_count < self.max_retries:
+                                retry_delay = 60
                                 self.logger.info(
-                                    f"Retrying job {job_id} (crawl_id={crawl_id}) due to exception, with 60s delay. Attempt {releases_count + 1}/{self.max_retries + 1}."
+                                    f"Preparing to RETRY job {job_id} (crawl_id={crawl_id}) due to exception, via Beanstalkd release with delay {retry_delay}s. Attempt based on releases: {releases_count + 1}/{self.max_retries + 1}."
                                 )
                                 self.queue_manager.retry_job(
-                                    job_obj, job_data, delay=60
+                                    job_obj, job_data, delay=retry_delay
                                 )
+                                self.logger.info(f"SUCCESSFULLY RELEASED job {job_id} (crawl_id={crawl_id}) for retry after exception.")
                             else:
                                 self.logger.error(
-                                    f"Job {job_id} (crawl_id={crawl_id}) failed due to exception after {releases_count} releases. Burying job."
+                                    f"Job {job_id} (crawl_id={crawl_id}) failed due to exception after {releases_count} releases (max {self.max_retries} allowed by listener). Preparing to BURY job."
                                 )
                                 self.queue_manager.bury_job(job_obj, job_data)
+                                self.logger.info(f"SUCCESSFULLY BURIED job {job_id} (crawl_id={crawl_id}) after exception.")
                         else:
                             self.logger.error(
-                                f"Cannot retry/bury job {job_id} (crawl_id={crawl_id}) due to missing job_obj or job_data after exception."
+                                f"Cannot retry/bury job {job_id} (crawl_id={crawl_id}) due to missing job_obj or job_data after processing_exception."
                             )
                     finally:
-                        if toucher_thread and toucher_thread.is_alive():
+                        if self.toucher_thread and self.toucher_thread.is_alive():
                             self.logger.info(
                                 f"Signaling toucher thread for job {job_id}/{crawl_id} to stop."
                             )
-                            toucher_active_event.set()
-                            toucher_thread.join(
-                                timeout=max(
-                                    2.0,
-                                    current_job_actual_ttr
-                                    * TOUCH_INTERVAL_FACTOR
-                                    * 0.5,
-                                )
-                            )
-                            if toucher_thread.is_alive():
+                            self.toucher_active_event.set()
+                            join_timeout = max(2.0, (current_job_actual_ttr * TOUCH_INTERVAL_FACTOR) + 5) if 'current_job_actual_ttr' in locals() and current_job_actual_ttr else 5.0
+                            self.toucher_thread.join(timeout=join_timeout)
+                            if self.toucher_thread.is_alive():
                                 self.logger.warning(
-                                    f"Toucher thread for job {job_id}/{crawl_id} did not stop in time."
+                                    f"Toucher thread for job {job_id}/{crawl_id} did not stop in time after {join_timeout}s."
                                 )
-
+                        self.toucher_thread = None
                 elif job_id is None and job_data is None and job_obj is None:
-                    self.logger.debug("Job dequeue timeout. No job received.")
+                    # This branch is hit when _reserve_job times out (timeout=5 specified)
+                    self.logger.info("No job received from Beanstalkd (timeout). Listener idle, will retry polling.")
                 else:
-                    self.logger.warning(
-                        f"Job unusual return from dequeue_job: job_id={job_id}, job_data is None: {job_data is None}, job_obj is None: {job_obj is None}"
+                    # This case should ideally not happen if _reserve_job is consistent
+                    self.logger.error(
+                        f"Unusual return from _reserve_job: job_id={job_id}, job_data is None: {job_data is None}, job_obj is None: {job_obj is None}"
                     )
+                self.current_job_id = None # Clear current job ID after handling
 
             except Exception as e:
                 self.logger.error(
-                    f"UNHANDLED EXCEPTION in main processing loop (job_id: {job_id}, crawl_id: {crawl_id}): {e}",
+                    f"UNHANDLED EXCEPTION in main processing loop (current_job_id: {self.current_job_id if self.current_job_id else 'N/A'}): {e}",
                     exc_info=True,
                 )
-                if toucher_thread and toucher_thread.is_alive():
-                    toucher_active_event.set()
-                    toucher_thread.join(timeout=5.0)
+                if self.toucher_thread and self.toucher_thread.is_alive(): # Ensure toucher is stopped on outer loop exception
+                    self.toucher_active_event.set()
+                    self.toucher_thread.join(timeout=5.0) # Quick timeout
+                self.toucher_thread = None # Clear thread reference
+                self.current_job_id = None # Clear current job ID
                 time.sleep(5)
 
         self.logger.info(f"CrawlJobListener_{self.instance_id} shutting down.")

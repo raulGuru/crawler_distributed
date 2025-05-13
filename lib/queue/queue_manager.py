@@ -203,14 +203,21 @@ class QueueManager:
         """Touch a reserved job to extend its TTR. Expects a Beanstalkd job object."""
         if not job_object or not (hasattr(job_object, 'id') and hasattr(job_object, 'body')):
             # Check if it looks like a greenstalk job object
-            self.logger.error("Cannot touch job: job_object is missing or not a valid job object")
+            self.logger.error(
+                f"Cannot touch job: job_object is missing or not a valid job object. Type: {type(job_object)}, Value: {str(job_object)[:100]}"
+            )
             raise ValueError("job_object must be a valid Beanstalkd job object")
         try:
+            self.logger.debug(f"QueueManager: Attempting to call self.client.touch for job_object with id {getattr(job_object, 'id', 'N/A')}. Type of job_object: {type(job_object)}")
             self.client.touch(job_object) # Pass the full job object as BeanstalkdClient can handle it
             self.logger.info(f"Touched job {job_object.id} via QueueManager.")
         except Exception as e:
-            job_id = getattr(job_object, 'id', 'unknown')
-            self.logger.error(f"QueueManager failed to touch job {job_id}: {str(e)}")
+            job_id_for_log = 'unknown_job_id'
+            if hasattr(job_object, 'id'):
+                job_id_for_log = job_object.id
+            elif isinstance(job_object, int):
+                job_id_for_log = job_object
+            self.logger.error(f"QueueManager failed to touch job {job_id_for_log} (job_object type: {type(job_object)}): {repr(e)}")
             raise
 
     def get_job_stats(self, job_object) -> dict | None:

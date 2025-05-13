@@ -15,6 +15,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from lib.utils.logging_utils import LoggingUtils
 from lib.queue.beanstalkd_client import BeanstalkdClient
 from config.base_settings import QUEUE_HOST, QUEUE_PORT, MONGO_URI, LOG_DIR
+from config.parser_settings import ALL_PARSER_TASK_TYPES
 
 
 class HealthCheck:
@@ -263,13 +264,26 @@ class HealthCheck:
         Check if component processes are running
 
         Args:
-            components (list, optional): List of component names to check
+            components (list, optional): List of component names to check.
+                                       If None, uses a default list (less precise).
 
         Returns:
             dict: Health check result
         """
         if components is None:
-            components = ['crawl_job_listener', 'monitor_worker', 'parse_worker']
+            # This default list is kept for direct calls to this method without specific components,
+            # but IntegrationService should provide the actual list of managed workers.
+            self.logger.warning(
+                "check_component_processes called without specific components, using a dynamically generated default list from parser_settings."
+            )
+            default_components = ['crawl_job_listener']
+            if ALL_PARSER_TASK_TYPES and isinstance(ALL_PARSER_TASK_TYPES, dict):
+                parser_task_names = list(ALL_PARSER_TASK_TYPES.keys())
+                default_components.extend(parser_task_names)
+                self.logger.debug(f"HealthCheck: Added parser tasks to default components: {parser_task_names}")
+            else:
+                self.logger.warning("HealthCheck: ALL_PARSER_TASK_TYPES not available or not a dict, default parser list will be empty.")
+            components = default_components
 
         result = {
             'component': 'processes',
@@ -283,17 +297,24 @@ class HealthCheck:
         try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
+                    pid = proc.pid
                     cmdline = proc.cmdline()
                     proc_name = proc.name()
+                    self.logger.debug(f"HealthCheck: Checking process PID: {pid}, Name: '{proc_name}', Cmdline: '{cmdline}'")
 
                     # Check if this process matches any of our components
-                    for component in components:
-                        if any(component in cmd for cmd in cmdline) or component in proc_name:
+                    for component_to_check in components:
+                        # self.logger.debug(f"HealthCheck:  -> Comparing with component: '{component_to_check}'")
+                        matched_by_cmdline = any(component_to_check in cmd_part for cmd_part in cmdline)
+                        matched_by_proc_name = component_to_check in proc_name
+
+                        if matched_by_cmdline or matched_by_proc_name:
+                            self.logger.debug(f"HealthCheck:   Found match for component '{component_to_check}'! PID: {pid} (Match by cmdline: {matched_by_cmdline}, Match by name: {matched_by_proc_name})")
                             # Get process info
-                            p = psutil.Process(proc.pid)
-                            result['metrics'][component] = {
+                            p = psutil.Process(pid)
+                            result['metrics'][component_to_check] = {
                                 'running': True,
-                                'pid': proc.pid,
+                                'pid': pid,
                                 'cpu_percent': p.cpu_percent(interval=0.1),
                                 'memory_mb': p.memory_info().rss / (1024 * 1024),
                                 'started': datetime.fromtimestamp(p.create_time()).isoformat()
@@ -321,14 +342,20 @@ class HealthCheck:
 
         return result
 
-    def run_all_checks(self):
+    def run_all_checks(self, worker_names_to_check: list = None):
         """
         Run all health checks
+
+        Args:
+            worker_names_to_check (list, optional): Specific worker names to check for process health.
+                                                  If None, a default list will be used by check_component_processes.
 
         Returns:
             dict: All health check results
         """
         self.logger.info("Running all health checks")
+        if worker_names_to_check:
+            self.logger.info(f"Specifically checking for worker processes: {worker_names_to_check}")
 
         results = {
             'timestamp': datetime.utcnow().isoformat(),
@@ -341,7 +368,7 @@ class HealthCheck:
             self.check_beanstalkd(),
             self.check_mongodb(),
             self.check_system(),
-            self.check_component_processes()
+            self.check_component_processes(components=worker_names_to_check)
         ]
 
         results['checks'] = checks
