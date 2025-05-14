@@ -44,7 +44,7 @@ class DirectivesWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "directives_data"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract directives data from HTML content.
 
         Args:

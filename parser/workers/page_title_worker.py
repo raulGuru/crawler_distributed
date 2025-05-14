@@ -44,7 +44,7 @@ class PageTitleWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "page_title"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract page title specific data from HTML content.
 
         Args:

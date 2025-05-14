@@ -44,7 +44,7 @@ class MetaDescriptionWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "meta_description"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract meta description data from HTML content.
 
         Args:

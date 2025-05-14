@@ -48,7 +48,7 @@ class HeadingsWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "headings_data"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract headings data from HTML content.
 
         Args:

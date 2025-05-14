@@ -48,7 +48,7 @@ class HreflangWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "hreflang_data"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract hreflang data from HTML content.
 
         Args:
@@ -119,11 +119,6 @@ class HreflangWorker(BaseParserWorker):
                 "invalid_lang_codes": invalid_lang_codes,
                 "issues": issues
             }
-
-            self.logger.debug(
-                f"Extracted hreflang data for doc_id: {doc_id_str}: "
-                f"{len(all_hreflang_tags)} tags, {len(issues)} issues"
-            )
 
             return hreflang_data
 

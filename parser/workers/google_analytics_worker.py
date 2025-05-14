@@ -66,7 +66,7 @@ class GoogleAnalyticsWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "ga_analytics"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract Google Analytics data from HTML content.
 
         Args:
@@ -97,7 +97,7 @@ class GoogleAnalyticsWorker(BaseParserWorker):
             self._extract_from_gtm_containers(soup, analytics_data)
 
             # Remove duplicate GA codes while preserving order
-            analytics_data["ga_codes"] = list(dict.fromkeys(analytics_data["ga_codes"]))
+            #analytics_data["ga_codes"] = list(dict.fromkeys(analytics_data["ga_codes"]))
 
             self.logger.debug(
                 f"Extracted GA analytics data: {analytics_data} for doc_id: {doc_id_str}"

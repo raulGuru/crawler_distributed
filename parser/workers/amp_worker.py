@@ -44,7 +44,7 @@ class AmpDataWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "amp_data"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract AMP implementation data from HTML content.
 
         Args:

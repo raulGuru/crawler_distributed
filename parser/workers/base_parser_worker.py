@@ -102,7 +102,7 @@ class BaseParserWorker(abc.ABC):
         Validates the basic structure of job_data.
         Logs an error and returns False if validation fails.
         """
-        required_keys = ['document_id', 'html_file_path', 'task_type']
+        required_keys = ['document_id', 'html_file_path', 'task_type', 'url']
         for key in required_keys:
             if key not in job_data:
                 self.logger.error(f"[{self.worker_name}] Missing critical key '{key}' in job data for job ID {job_id}. Invalid job.")
@@ -179,6 +179,8 @@ class BaseParserWorker(abc.ABC):
         start_time = time.time()
         doc_id_str = job_data["document_id"]
         html_path = job_data["html_file_path"]
+        url = job_data["url"]
+        domain = job_data["domain"]
 
         self.logger.debug(f"[{self.worker_name}] Processing task for doc_id: {doc_id_str}, html_path: {html_path}")
 
@@ -189,7 +191,7 @@ class BaseParserWorker(abc.ABC):
         html_content = self._read_html_file(html_path)
 
         # Extract data (delegated to concrete implementation)
-        extracted_data = self.extract_data(html_content, html_path, doc_id_str)
+        extracted_data = self.extract_data(html_content, html_path, doc_id_str, url, domain)
 
         # Store in MongoDB (using common method)
         self._store_in_mongodb(extracted_data, doc_id_str, self.get_data_field_name())
@@ -201,7 +203,7 @@ class BaseParserWorker(abc.ABC):
         )
 
     @abc.abstractmethod
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """
         Extract specific data - must be implemented by concrete workers.
 
@@ -209,6 +211,8 @@ class BaseParserWorker(abc.ABC):
             html_content (str): The HTML content to extract data from.
             html_path (str): Path to the HTML file.
             doc_id_str (str): Document ID string.
+            url (str): The URL of the page.
+            domain (str): The domain of the page.
 
         Returns:
             dict: The extracted data.

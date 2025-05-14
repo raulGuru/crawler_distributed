@@ -10,6 +10,10 @@ import os
 import socket
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +35,7 @@ LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 CRAWLER_JOB_LISTENER_PATH = os.path.join(PROJECT_ROOT, 'crawler', 'worker', 'crawl_job_listener.py')
 PARSE_WORKER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'job_dispatcher.py')
 MONITOR_WORKER_PATH = os.path.join(PROJECT_ROOT, 'workers', 'monitor_worker.py')
+CRAWLER_INSTANCES = int(os.getenv("CRAWLER_INSTANCES", 2))
 
 # Scrapy
 SCRAPY_PATH = 'scrapy'
@@ -62,7 +67,7 @@ MONGO_PARSE_JOB_COLLECTION = 'parse_jobs'
 
 # Beanstalkd queue configuration
 QUEUE_HOST = os.environ.get('QUEUE_HOST', 'localhost')
-QUEUE_PORT = int(os.environ.get('QUEUE_PORT', '11300'))
+QUEUE_PORT = int(os.environ.get('QUEUE_PORT', 11300))
 QUEUE_TUBES = ['crawl_jobs', 'parse_jobs', 'monitor_jobs']
 QUEUE_CRAWL_TUBE = os.environ.get('QUEUE_CRAWL_TUBE', 'crawl_jobs')
 QUEUE_PARSE_TUBE = os.environ.get('QUEUE_PARSE_TUBE', 'parse_jobs')

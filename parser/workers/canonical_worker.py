@@ -49,7 +49,7 @@ class CanonicalWorker(BaseParserWorker):
         """Return the MongoDB field name for this worker's data."""
         return "canonical_data"
 
-    def extract_data(self, html_content: str, html_path: str, doc_id_str: str) -> dict:
+    def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
         """Extract canonical URL information from HTML content.
 
         Args:

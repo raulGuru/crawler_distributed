@@ -17,7 +17,8 @@ from lib.utils.health_check import HealthCheck
 from config.base_settings import (
     QUEUE_HOST, QUEUE_PORT, MONGO_URI, LOG_DIR,
     CRAWLER_JOB_LISTENER_PATH,
-    PROJECT_ROOT
+    PROJECT_ROOT,
+    CRAWLER_INSTANCES
 )
 from config.parser_settings import (
     ALL_PARSER_TASK_TYPES
@@ -34,7 +35,7 @@ class IntegrationService:
         'crawl_job_listener': {
             'script': CRAWLER_JOB_LISTENER_PATH,
             'required': True,  # System requires this worker
-            'instances': 4,    # Number of instances to run
+            'instances': CRAWLER_INSTANCES,    # Number of instances to run
             'restart': True,   # Auto-restart if it crashes
             'args': []         # Additional command line arguments
         },
@@ -97,7 +98,7 @@ class IntegrationService:
                 continue
 
             script_path = os.path.join(PROJECT_ROOT, 'parser', 'workers', script_filename)
-            num_instances = task_details.get('instances', 1)
+            num_instances = task_details.get('instances', 2)
 
             if task_type in combined_workers:
                 self.logger.warning(f"Parser task_type '{task_type}' conflicts with a core worker name. Parser worker config will overwrite.")
