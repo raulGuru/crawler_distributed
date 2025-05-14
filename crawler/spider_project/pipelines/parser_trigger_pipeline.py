@@ -2,11 +2,13 @@ import logging
 from scrapy.exceptions import DropItem
 import sys
 import os
+from datetime import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
 
-from parser.dispatch.job_dispatcher import create_and_dispatch_parser_jobs
+from parser.dispatch.job_dispatcher import dispatch_jobs
 from lib.utils.logging_utils import LoggingUtils
+from lib.storage.mongodb_client import MongoDBClient
 
 # Helper function to convert byte string keys in nested dicts/lists to strings
 def convert_keys_to_str(obj):
@@ -52,8 +54,7 @@ class ParserTriggerPipeline:
             self.logger.debug(f"Skipping item, no 'html_file_path': {item.get('url', 'N/A')}")
             return item
 
-        # Selectively build parser_item with necessary fields
-        raw_parser_item = {
+        base_parser_data = {
             'url': item.get('url'),
             'html_file_path': html_file_path,
             'domain': item.get('domain'),
@@ -61,18 +62,50 @@ class ParserTriggerPipeline:
             'crawled_at': item.get('crawled_at'),
             'crawl_id': item.get('crawl_id')
         }
+        base_parser_data = convert_keys_to_str(base_parser_data)
 
-        # Ensure all keys and sub-keys are strings
-        parser_item = convert_keys_to_str(raw_parser_item)
+        self.logger.debug(f"Base parser data prepared (crawl_id: {base_parser_data.get('crawl_id')}): {base_parser_data}")
 
-        self.logger.debug(f"Prepared parser_item for dispatch (crawl_id: {parser_item.get('crawl_id')}): {parser_item}")
+        mongodb_client = None
+        inserted_object_id = None
+        parser_unique_id = None
 
         try:
-            create_and_dispatch_parser_jobs(parser_item)
-            self.logger.info(f"Successfully initiated parser job dispatch for {parser_item.get('url')} (file: {parser_item.get('html_file_path')}).")
-        except Exception as e:
-            self.logger.error(f"Error calling create_and_dispatch_parser_jobs for {parser_item.get('url')} (file: {parser_item.get('html_file_path')}): {e}")
-            LoggingUtils.log_exception(self.logger, e, f"create_and_dispatch_parser_jobs failed for {parser_item.get('url')}")
-            # Optionally, re-raise or DropItem if this failure is critical
-            # raise DropItem(f"Failed to dispatch parser jobs for {item.get('url')}")
+            mongodb_client = MongoDBClient()
+            parser_doc_for_insertion = {
+                **base_parser_data,
+                'processing_status': 'pending_dispatch',
+                'parser_jobs_dispatched_at': None,
+                'initial_insert_at': datetime.utcnow(),
+            }
+            self.logger.debug(f"Attempting to insert parser_doc into MongoDB (crawl_id: {parser_doc_for_insertion.get('crawl_id')}): {parser_doc_for_insertion}")
+            inserted_object_id = mongodb_client.insert_one('parsed_html_data', parser_doc_for_insertion)
+
+            if inserted_object_id:
+                parser_unique_id = str(inserted_object_id)
+                self.logger.info(f"Successfully inserted initial parser data for {base_parser_data.get('url')}. MongoDB _id: {parser_unique_id} (ObjectId: {inserted_object_id}).")
+            else:
+                self.logger.error(f"MongoDB insert_one returned no ID for {base_parser_data.get('url')}. Cannot proceed with dispatch.")
+                raise DropItem(f"Failed to get MongoDB ID for {base_parser_data.get('url')}")
+
+        except Exception as e_mongo:
+            self.logger.error(f"Error during MongoDB insertion for {base_parser_data.get('url')}: {e_mongo}")
+            LoggingUtils.log_exception(self.logger, e_mongo, f"MongoDB insertion failed for {base_parser_data.get('url')}")
+            raise DropItem(f"MongoDB error for {base_parser_data.get('url')}: {e_mongo}")
+        finally:
+            if mongodb_client:
+                mongodb_client.close()
+
+        try:
+            dispatch_jobs(
+                source_parser_item=base_parser_data,
+                document_mongo_id=inserted_object_id,
+                document_str_id=parser_unique_id
+            )
+            self.logger.info(f"Successfully initiated parser job dispatch process for {base_parser_data.get('url')} (doc_id: {parser_unique_id}).")
+        except Exception as e_dispatch:
+            self.logger.error(f"Error calling dispatcher for {base_parser_data.get('url')} (doc_id: {parser_unique_id}): {e_dispatch}")
+            LoggingUtils.log_exception(self.logger, e_dispatch, f"Dispatcher failed for {base_parser_data.get('url')}")
+            # Depending on policy, we might want to DropItem or try to update MongoDB status to 'dispatch_failed'
+            # For now, just log and return the item. The MongoDB doc will remain 'pending_dispatch'.
         return item

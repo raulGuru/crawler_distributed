@@ -67,7 +67,7 @@ QUEUE_TUBES = ['crawl_jobs', 'parse_jobs', 'monitor_jobs']
 QUEUE_CRAWL_TUBE = os.environ.get('QUEUE_CRAWL_TUBE', 'crawl_jobs')
 QUEUE_PARSE_TUBE = os.environ.get('QUEUE_PARSE_TUBE', 'parse_jobs')
 QUEUE_MONITOR_TUBE = os.environ.get('QUEUE_MONITOR_TUBE', 'monitor_jobs')
-QUEUE_TTR = int(os.environ.get('QUEUE_TTR', 900))
+QUEUE_TTR = int(os.environ.get('QUEUE_TTR', 300))
 
 # General settings
 HOSTNAME = socket.gethostname()
