@@ -137,7 +137,9 @@ class URLSpider(BaseSpider):
             'headers': dict(response.headers),
             'page_type': 'html',
             'job_id': self.job_id,
-            'domain': self.domain  # Explicitly include domain in output
+            'crawl_id': self.crawl_id,
+            'domain': self.domain,
+            **self.custom_params
         }
 
         # Yield the parsed output directly to maintain consistency with DomainSpider

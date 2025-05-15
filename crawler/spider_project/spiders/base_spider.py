@@ -72,6 +72,12 @@ class BaseSpider(Spider):
         if not self.crawl_id:
             raise ValueError("crawl_id must be provided")
 
+        self.custom_params = {}
+        standard_params = {'job_id', 'crawl_id', 'max_pages', 'domain', 'url', 'use_sitemap', 'single_url'}
+        for key, value in kwargs.items():
+            if key not in standard_params:
+                self.custom_params[key] = value
+
         # Ensure max_pages is an integer
         self.max_pages = int(max_pages) if max_pages is not None else 50
         self.pages_crawled = 0
@@ -338,8 +344,6 @@ class BaseSpider(Spider):
         yield {
             'url': response.url,
             'html': response.text,
-            'job_id': self.job_id,
-            'crawl_id': self.crawl_id,  # Include crawl_id in item
             'content_type': response.headers.get('Content-Type', b'').decode('utf-8', 'ignore'),
             'status': response.status,
             'crawl_strategy': {

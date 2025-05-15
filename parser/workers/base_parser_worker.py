@@ -184,6 +184,9 @@ class BaseParserWorker(abc.ABC):
 
         self.logger.debug(f"[{self.worker_name}] Processing task for doc_id: {doc_id_str}, html_path: {html_path}")
 
+        # Store job_data for access in worker methods
+        self.job_data = job_data
+
         # Common validation
         self._validate_html_file(html_path, doc_id_str)
 

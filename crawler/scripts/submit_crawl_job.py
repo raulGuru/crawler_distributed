@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict
 from urllib.parse import urlparse
 import uuid
+import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
@@ -74,6 +75,19 @@ def submit_crawl_job(args):
     final_crawl_id = None
     is_new_task = True
 
+    # Get custom parameters from command line if provided
+    custom_params = {}
+    if hasattr(args, 'custom_params') and args.custom_params:
+        try:
+            # Parse JSON string from command line
+            if isinstance(args.custom_params, str):
+                custom_params = json.loads(args.custom_params)
+            elif isinstance(args.custom_params, dict):
+                custom_params = args.custom_params
+            logger.info(f"Received custom parameters: {custom_params}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse custom parameters: {e}. Using empty dict.")
+
     # Determine domain for logging and query
     current_domain = args.domain
     if args.url and not args.domain:
@@ -123,6 +137,15 @@ def submit_crawl_job(args):
         job_data_for_beanstalkd['single_url'] = args.single_url
     if args.use_sitemap is not None:
         job_data_for_beanstalkd['use_sitemap'] = args.use_sitemap
+
+    # Add any custom parameters to job_data
+    if custom_params:
+        # Don't override existing parameters
+        for key, value in custom_params.items():
+            if key not in job_data_for_beanstalkd:
+                job_data_for_beanstalkd[key] = value
+            else:
+                logger.warning(f"Custom parameter '{key}' conflicts with standard parameter, ignoring custom value.")
 
     # Apply environment defaults to the job_data that will be enqueued
     job_data_for_beanstalkd = get_job_params(job_data_for_beanstalkd)
@@ -188,6 +211,7 @@ def main():
     parser.add_argument('--url', help='URL to crawl (for single URL mode, implies domain)')
     parser.add_argument('--max-pages', type=int, default=None, help=f'Maximum pages to crawl (default: {DEFAULT_MAX_PAGES} from .env)')
     parser.add_argument('--single-url', action=argparse.BooleanOptionalAction, default=None, help='Crawl a single URL only (auto-set if --url is main identifier)')
+    parser.add_argument('--custom-params', help='JSON string with custom parameters to be passed through the system (e.g., \'{"param1": "value1", "param2": 123}\')')
 
     sitemap_group = parser.add_mutually_exclusive_group()
     sitemap_group.add_argument('--use-sitemap', dest='use_sitemap', action='store_true', default=None, help='Use sitemap for URL discovery')

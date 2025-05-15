@@ -14,6 +14,7 @@ from datetime import datetime
 import argparse
 import time
 from urllib.parse import urljoin
+import re
 
 # Add the project root to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -56,6 +57,8 @@ class CanonicalWorker(BaseParserWorker):
             html_content (str): The HTML content to parse.
             html_path (str): Path to the HTML file (for logging).
             doc_id_str (str): Document ID (for logging).
+            url (str): The URL of the page.
+            domain (str): The domain of the page.
 
         Returns:
             dict: Extracted canonical data.
@@ -68,7 +71,7 @@ class CanonicalWorker(BaseParserWorker):
 
             # Extract the current page URL from job metadata if available
             # Otherwise, we'll have to infer from file or set to None
-            current_url = self._get_current_url_from_file(html_path)
+            current_url = url or self._get_current_url_from_file(html_path)
 
             # Extract canonical URL from HTML link element
             canonical_tags = soup.find_all("link", rel="canonical")
@@ -80,14 +83,20 @@ class CanonicalWorker(BaseParserWorker):
                 canonical_url = canonical_tags[0].get("href")
                 if canonical_url and not canonical_url.startswith(('http://', 'https://')):
                     # Handle relative URLs by making them absolute
-                    # Note: This is a best-effort approach; ideally we'd have the base URL
                     if current_url:
                         canonical_url = urljoin(current_url, canonical_url)
 
-            # Extract HTTP headers canonical (would normally come from response.headers)
-            # In this case, we might not have access to HTTP headers in the HTML file
-            # So this is just a placeholder for the structure
+            # Extract HTTP headers canonical from response headers
             http_canonical = None
+            if hasattr(self, 'job_data') and self.job_data.get('headers'):
+                link_header = self.job_data['headers'].get('link', '')
+                if link_header:
+                    # Parse Link header for canonical
+                    for link in link_header.split(','):
+                        if 'rel="canonical"' in link or "rel='canonical'" in link:
+                            match = re.search(r'<([^>]+)>', link)
+                            if match:
+                                http_canonical = match.group(1)
 
             # Check if we have any form of canonical
             has_canonical = bool(canonical_url) or bool(http_canonical)
@@ -149,7 +158,10 @@ class CanonicalWorker(BaseParserWorker):
             meta_robots = soup.find("meta", attrs={"name": "robots"})
             robots_content = meta_robots.get("content", "") if meta_robots else ""
 
-            x_robots_tag = ""  # Would come from HTTP headers, just a placeholder
+            # Get X-Robots-Tag from headers
+            x_robots_tag = ""
+            if hasattr(self, 'job_data') and self.job_data.get('headers'):
+                x_robots_tag = self.job_data['headers'].get('x-robots-tag', '')
 
             is_noindex = ('noindex' in robots_content.lower() or 'noindex' in x_robots_tag.lower())
 

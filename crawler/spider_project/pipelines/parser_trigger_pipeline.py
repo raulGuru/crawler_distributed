@@ -10,12 +10,41 @@ from parser.dispatch.job_dispatcher import dispatch_jobs
 from lib.utils.logging_utils import LoggingUtils
 from lib.storage.mongodb_client import MongoDBClient
 
-# Helper function to convert byte string keys in nested dicts/lists to strings
-def convert_keys_to_str(obj):
+def sanitize_and_convert(obj, skip_binary=True):
+    """Convert bytes to strings and handle nested structures.
+
+    Args:
+        obj: The object to sanitize and convert
+        skip_binary: Whether to skip binary fields like html, body, etc.
+
+    Returns:
+        Sanitized and converted object with all strings decoded
+    """
     if isinstance(obj, dict):
-        return { (k.decode('utf-8', 'replace') if isinstance(k, bytes) else k): convert_keys_to_str(v) for k, v in obj.items() }
+        result = {}
+        for k, v in obj.items():
+            # Skip binary fields if requested
+            if skip_binary and k in ['html', 'body', 'raw_content']:
+                continue
+
+            # Convert key if it's bytes
+            key = k.decode('utf-8', 'replace') if isinstance(k, bytes) else k
+
+            # Special handling for headers
+            if key == 'headers' and isinstance(v, dict):
+                result[key] = {
+                    k2.decode('utf-8', 'replace') if isinstance(k2, bytes) else k2:
+                    v2[0].decode('utf-8', 'replace') if isinstance(v2[0], bytes) else v2[0]
+                    for k2, v2 in v.items()
+                }
+            else:
+                # Recursively handle other values
+                result[key] = sanitize_and_convert(v, skip_binary)
+        return result
     elif isinstance(obj, list):
-        return [convert_keys_to_str(elem) for elem in obj]
+        return [sanitize_and_convert(elem, skip_binary) for elem in obj]
+    elif isinstance(obj, bytes):
+        return obj.decode('utf-8', 'replace')
     return obj
 
 class ParserTriggerPipeline:
@@ -54,17 +83,11 @@ class ParserTriggerPipeline:
             self.logger.debug(f"Skipping item, no 'html_file_path': {item.get('url', 'N/A')}")
             return item
 
-        base_parser_data = {
-            'url': item.get('url'),
-            'html_file_path': html_file_path,
-            'domain': item.get('domain'),
-            'storage': item.get('storage'),
-            'crawled_at': item.get('crawled_at'),
-            'crawl_id': item.get('crawl_id')
-        }
-        base_parser_data = convert_keys_to_str(base_parser_data)
-
-        self.logger.debug(f"Base parser data prepared (crawl_id: {base_parser_data.get('crawl_id')}): {base_parser_data}")
+        # Sanitize and convert item in one pass
+        base_parser_data = sanitize_and_convert({
+            **item,
+            'html_file_path': html_file_path
+        })
 
         mongodb_client = None
         inserted_object_id = None

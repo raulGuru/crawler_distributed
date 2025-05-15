@@ -519,7 +519,9 @@ class DomainSpider(BaseSpider):
             'headers': dict(response.headers),
             'page_type': 'html',
             'job_id': self.job_id,
-            'domain': self.domain
+            'crawl_id': self.crawl_id,
+            'domain': self.domain,
+            **self.custom_params
         }
 
         yield output
