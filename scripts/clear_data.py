@@ -84,6 +84,8 @@ def clear_beanstalkd():
     except Exception as e:
         print(f"Error connecting to Beanstalkd: {str(e)}")
 
+import shutil
+
 def clear_html_files():
     """Clear all HTML files from the data directory"""
     print("Clearing HTML files...")
@@ -96,16 +98,33 @@ def clear_html_files():
 
         for domain in domains:
             domain_dir = os.path.join(html_dir, domain)
-            files = os.listdir(domain_dir)
-            for file in files:
-                os.remove(os.path.join(domain_dir, file))
-            print(f"Cleared {len(files)} files from {domain}")
-            os.rmdir(domain_dir)
-            print(f"Cleared {domain} directory")
+            print(f"Clearing HTML files for {domain}")
+
+            # Count files and directories before deletion
+            file_count, dir_count = _count_files_and_dirs(domain_dir)
+            print(f"Found {file_count} files and {dir_count} subdirectories in {domain}")
+
+            # Remove entire directory tree recursively
+            shutil.rmtree(domain_dir)
+            print(f"Successfully cleared {domain} directory ({file_count} files, {dir_count} subdirectories)")
 
         print("HTML files cleared.")
     else:
         print(f"HTML directory {html_dir} not found.")
+
+def _count_files_and_dirs(directory):
+    """Count total files and subdirectories in a directory tree"""
+    file_count = 0
+    dir_count = 0
+
+    # Walk through directory tree to count files and directories
+    for root, dirs, files in os.walk(directory):
+        file_count += len(files)
+        # Don't count the root directory itself, only subdirectories
+        if root != directory:
+            dir_count += 1
+
+    return file_count, dir_count
 
 def kill_related_python_processes():
     """Kill all Python processes related to the crawler project"""
