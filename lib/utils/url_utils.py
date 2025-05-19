@@ -21,7 +21,7 @@ from posixpath import normpath
 logger = logging.getLogger(__name__)
 
 # Commonly excluded URL parameters that don't affect content
-EXCLUDED_PARAMS = {
+_EXCLUDED_PARAMS = {
     # Analytics parameters
     'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
     'fbclid', 'gclid', 'msclkid', 'dclid', 'zanpid', 'igshid',
@@ -37,7 +37,7 @@ EXCLUDED_PARAMS = {
 }
 
 # Media file extensions to skip
-MEDIA_EXTENSIONS = {
+_MEDIA_EXTENSIONS = {
     # Images
     '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff',
 
@@ -56,6 +56,9 @@ MEDIA_EXTENSIONS = {
     '.css', '.js', '.json', '.xml', '.rss', '.atom', '.swf', '.exe', '.dll',
     '.apk', '.dmg', '.pkg', '.deb', '.rpm',
 }
+
+_PSEUDO_CCTLD_LABELS = {"co", "com", "net", "org", "gov", "edu", "ac"}
+
 
 
 def normalize_url(url, remove_default_port=True, sort_query=True,
@@ -114,7 +117,7 @@ def normalize_url(url, remove_default_port=True, sort_query=True,
             # Remove tracking parameters if requested
             if remove_tracking:
                 query_params = {k: v for k, v in query_params.items()
-                               if k.lower() not in EXCLUDED_PARAMS}
+                               if k.lower() not in _EXCLUDED_PARAMS}
 
             # Sort parameters if requested
             if sort_query:
@@ -175,7 +178,7 @@ def url_fingerprint(url, include_query=True):
             query_params = parse_qs(parsed.query, keep_blank_values=True)
             # Remove tracking parameters
             query_params = {k: v for k, v in query_params.items()
-                           if k.lower() not in EXCLUDED_PARAMS}
+                           if k.lower() not in _EXCLUDED_PARAMS}
             query = urlencode(sorted(query_params.items()), doseq=True)
         else:
             query = ''
@@ -259,6 +262,21 @@ def extract_base_domain(domain):
     else:
         return domain
 
+def extract_base_domain2(url_or_host: str) -> str:
+    """
+    Best-effort parent domain without external deps.
+    Still fails for exotic PSL entries but covers common cases.
+    """
+    host = urlparse(url_or_host).hostname or url_or_host
+    host = host.lower().rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+
+    parts = host.split(".")
+    if len(parts) >= 3 and parts[-2] in _PSEUDO_CCTLD_LABELS and len(parts[-1]) == 2:
+        return ".".join(parts[-3:])          # example.co.uk
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+
 
 def is_media_url(url):
     """
@@ -280,7 +298,7 @@ def is_media_url(url):
 
         # Check if the path has a media extension
         _, ext = path.rsplit('.', 1) if '.' in path else ('', '')
-        if ext and f'.{ext}' in MEDIA_EXTENSIONS:
+        if ext and f'.{ext}' in _MEDIA_EXTENSIONS:
             return True
 
         # Check for query parameters that suggest media

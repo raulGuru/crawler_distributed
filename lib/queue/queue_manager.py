@@ -1,4 +1,6 @@
+from contextlib import closing
 import logging
+from greenstalk import NotIgnoredError
 from datetime import datetime
 
 from config.base_settings import QUEUE_CRAWL_TUBE, QUEUE_PARSE_TUBE, QUEUE_MONITOR_TUBE, MONGO_CRAWL_JOB_COLLECTION
@@ -232,7 +234,42 @@ class QueueManager:
             self.logger.error(f"QueueManager failed to get stats for job {job_id}: {e}")
             return None # Or raise
 
-    def purge_completed_jobs(self, crawl_id=None):
+    def purge_completed_jobs(self, crawl_id: str | None = None) -> None:
+        """Call the safe helper for each known tube."""
+        for tube in (
+            QUEUE_CRAWL_TUBE,
+            QUEUE_PARSE_TUBE,
+            QUEUE_MONITOR_TUBE,
+        ):
+            try:
+                self._purge_with_fresh_client(tube, crawl_id)
+            except Exception as exc:
+                self.logger.error(f"Purge error in tube {tube}: {exc}")
+
+    def _purge_with_fresh_client(self, tube: str, crawl_id: str | None) -> None:
+        """Delete READY jobs that match *crawl_id* using a short-lived connection."""
+        with closing(BeanstalkdClient(self.host, self.port)) as tmp:
+            tmp.watch_tube(tube)
+            try:
+                tmp.ignore_tube("default")
+            except NotIgnoredError:
+                pass
+
+            for _ in range(10):
+                job = tmp.peek_ready(tube)
+                if not job:
+                    break
+
+                body = job.body.decode() if isinstance(job.body, bytes) else job.body
+                try:
+                    data = self.serializer.deserialize_job(body)
+                except Exception:
+                    tmp.delete(job)
+                    continue
+                if crawl_id is None or data.get("crawl_id") == crawl_id:
+                    tmp.delete(job)
+
+    def purge_completed_jobs_old(self, crawl_id=None):
         """
         Purge completed jobs from the queue
 

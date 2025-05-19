@@ -16,6 +16,7 @@ from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PA
 from lib.storage.mongodb_client import MongoDBClient
 
 def setup_logging(domain):
+    domain = domain.replace('/', '_')
     log_filename = f"submit_{domain}.log"
     log_path = os.path.join(LOG_DIR, log_filename)
     logging.basicConfig(

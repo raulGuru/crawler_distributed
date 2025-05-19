@@ -39,12 +39,9 @@ CRAWLER_INSTANCES = int(os.getenv("CRAWLER_INSTANCES", 2))
 
 # Scrapy
 SCRAPY_PATH = 'scrapy'
-DEFAULT_MAX_PAGES = 50
+DEFAULT_MAX_PAGES = 25
 DEFAULT_SINGLE_URL = False
 DEFAULT_USE_SITEMAP = False
-
-# Maximum concurrent crawlers
-MAX_CONCURRENT_CRAWLERS = 5
 
 # Health check interval (seconds)
 HEALTH_CHECK_INTERVAL = 60

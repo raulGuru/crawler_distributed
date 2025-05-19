@@ -83,6 +83,10 @@ class ParserTriggerPipeline:
             self.logger.debug(f"Skipping item, no 'html_file_path': {item.get('url', 'N/A')}")
             return item
 
+        if not item.get("domain"):
+            item["domain"] = spider.domain
+            self.logger.info(f"Filled missing domain for {item.get('url', 'N/A')} → {item.get('domain', 'N/A')}")
+
         # Sanitize and convert item in one pass
         base_parser_data = sanitize_and_convert({
             **item,

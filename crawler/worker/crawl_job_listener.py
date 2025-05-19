@@ -134,7 +134,7 @@ class CrawlJobListener:
 
             try:
                 tubes = [QUEUE_CRAWL_TUBE]
-                self.logger.info(f"Attempting to reserve job from tubes: {tubes} with timeout 5s.")
+                # self.logger.info(f"Attempting to reserve job from tubes: {tubes} with timeout 5s.")
                 job_id, job_data, job_obj = self._reserve_job(tubes=tubes, timeout=5)
 
                 if job_id and job_data and job_obj:
@@ -341,7 +341,8 @@ class CrawlJobListener:
                         self.toucher_thread = None
                 elif job_id is None and job_data is None and job_obj is None:
                     # This branch is hit when _reserve_job times out (timeout=5 specified)
-                    self.logger.info("No job received from Beanstalkd (timeout). Listener idle, will retry polling.")
+                    # self.logger.info("No job received from Beanstalkd (timeout). Listener idle, will retry polling.")
+                    pass
                 else:
                     # This case should ideally not happen if _reserve_job is consistent
                     self.logger.error(

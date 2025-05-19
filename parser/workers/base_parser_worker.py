@@ -102,7 +102,7 @@ class BaseParserWorker(abc.ABC):
         Validates the basic structure of job_data.
         Logs an error and returns False if validation fails.
         """
-        required_keys = ['document_id', 'html_file_path', 'task_type', 'url']
+        required_keys = ['document_id', 'html_file_path', 'task_type', 'url', 'domain']
         for key in required_keys:
             if key not in job_data:
                 self.logger.error(f"[{self.worker_name}] Missing critical key '{key}' in job data for job ID {job_id}. Invalid job.")
