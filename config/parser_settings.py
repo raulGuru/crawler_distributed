@@ -110,6 +110,18 @@ ALL_PARSER_TASK_TYPES = {
         "ttr": DEFAULT_TTR,
         "instances": int(os.getenv("STRUCTURED_INSTANCES", DEFAULT_INSTANCES)),
         "worker_script_file": "structured_worker.py"
+    },
+    "third_party_services_extraction": {
+        "priority": DEFAULT_PRIORITY,
+        "ttr": DEFAULT_TTR,
+        "instances": int(os.getenv("THIRD_PARTY_SERVICES_INSTANCES", DEFAULT_INSTANCES)),
+        "worker_script_file": "third_party_services_worker.py"
+    },
+    "uri_extraction": {
+        "priority": DEFAULT_PRIORITY,
+        "ttr": DEFAULT_TTR,
+        "instances": int(os.getenv("URI_INSTANCES", DEFAULT_INSTANCES)),
+        "worker_script_file": "uri_worker.py"
     }
 
 
