@@ -4,6 +4,8 @@ import subprocess
 from datetime import datetime
 from typing import Any, Dict
 
+from lib.utils.logging_utils import LoggingUtils
+
 class CrawlJobProcessor:
     """
     Handles the processing of crawl jobs: builds Scrapy command, runs the process,
@@ -13,7 +15,7 @@ class CrawlJobProcessor:
         self.logger = logger
         self.mongodb_client = mongodb_client
         self.scrapy_path = scrapy_path
-        self.log_dir = log_dir
+        self.log_dir = log_dir  # retained for backward compatibility
         self.mongo_collection = mongo_collection
 
     def build_scrapy_command(self, job_id: Any, job_data: Dict[str, Any]) -> list:
@@ -41,7 +43,9 @@ class CrawlJobProcessor:
         for key, value in job_data.items():
             if key not in exclude_keys and value is not None:
                 cmd.extend(['-a', f"{key}={value}"])
-        log_file = os.path.join(self.log_dir, f"scrapy_{job_data['crawl_id']}.log")
+        log_file = LoggingUtils.scrapy_log_path(
+            job_data.get('domain'), job_data['crawl_id']
+        )
         cmd.extend(['--logfile', log_file])
         return cmd
 
