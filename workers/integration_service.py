@@ -126,10 +126,10 @@ class IntegrationService:
             self.logger.info("Initializing components")
 
             # Initialize MongoDB client
-            self.mongodb_client = MongoDBClient()
+            self.mongodb_client = MongoDBClient(logger=self.logger)
 
             # Initialize queue manager
-            self.queue_manager = QueueManager(host=self.queue_host, port=self.queue_port)
+            self.queue_manager = QueueManager(host=self.queue_host, port=self.queue_port, logger=self.logger)
 
             # Initialize health check
             self.health_check = HealthCheck(logger=self.logger)

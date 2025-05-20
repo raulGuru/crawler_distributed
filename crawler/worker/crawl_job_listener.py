@@ -72,9 +72,11 @@ class CrawlJobListener:
         try:
             self.logger.info("Initializing components")
             self.queue_manager = QueueManager(
-                host=self.queue_host, port=self.queue_port
+                host=self.queue_host,
+                port=self.queue_port,
+                logger=self.logger,
             )
-            self.mongodb_client = MongoDBClient()
+            self.mongodb_client = MongoDBClient(logger=self.logger)
             self.crawl_job_processor = CrawlJobProcessor(
                 logger=self.logger,
                 mongodb_client=self.mongodb_client,

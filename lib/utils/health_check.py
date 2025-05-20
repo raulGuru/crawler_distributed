@@ -74,7 +74,7 @@ class HealthCheck:
             sock.close()
 
             # Now check if beanstalkd responds to commands
-            client = BeanstalkdClient(host=host, port=port)
+            client = BeanstalkdClient(host=host, port=port, logger=self.logger)
 
             # Get server stats
             stats = client.stats()

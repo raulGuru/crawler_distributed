@@ -1,4 +1,5 @@
 import logging
+from lib.utils.logging_utils import LoggingUtils
 import os
 import pymongo
 from pymongo.errors import ConnectionFailure, OperationFailure
@@ -26,11 +27,14 @@ class MongoDBClient:
         else:
             return f"mongodb://{cls.MONGO_HOST}:{cls.MONGO_PORT}/{cls.MONGO_DB}"
 
-    def __init__(self, uri=None, connect_timeout=5000, max_retries=3):
+    def __init__(self, uri=None, connect_timeout=5000, max_retries=3, logger=None):
         self.uri = uri or self.build_uri()
         self.connect_timeout = connect_timeout
         self.max_retries = max_retries
-        self.logger = logging.getLogger(self.__class__.__name__)
+        if logger is None:
+            self.logger = LoggingUtils.setup_logger(self.__class__.__name__.lower(), console=False)
+        else:
+            self.logger = logger
         self.client = None
         self.db = None
         self._connect()

@@ -62,8 +62,8 @@ class BaseParserWorker(abc.ABC):
 
         self._setup_logging()
 
-        self.mongodb_client = MongoDBClient()
-        self.queue_manager = QueueManager(host=QUEUE_HOST, port=QUEUE_PORT)
+        self.mongodb_client = MongoDBClient(logger=self.logger)
+        self.queue_manager = QueueManager(host=QUEUE_HOST, port=QUEUE_PORT, logger=self.logger)
         # Initialize the base extractor
         self.extractor = BaseExtractor()
 

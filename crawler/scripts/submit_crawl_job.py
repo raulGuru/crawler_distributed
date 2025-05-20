@@ -70,7 +70,7 @@ def submit_crawl_job(args):
     logger = logging.getLogger(__name__)
 
     # Initialize MongoDB client early
-    mongodb_client = MongoDBClient()
+    mongodb_client = MongoDBClient(logger=logger)
     final_crawl_id = None
     is_new_task = True
 
@@ -151,7 +151,7 @@ def submit_crawl_job(args):
 
     logger.info(f"Preparing to enqueue crawl job for {current_domain} with crawl_id {final_crawl_id}")
 
-    queue_manager = QueueManager(host=queue_host, port=queue_port)
+    queue_manager = QueueManager(host=queue_host, port=queue_port, logger=logger)
     beanstalkd_job_id = None
     try:
         beanstalkd_job_id = queue_manager.enqueue_job(
