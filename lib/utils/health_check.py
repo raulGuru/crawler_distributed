@@ -30,7 +30,13 @@ class HealthCheck:
         Args:
             logger (logging.Logger, optional): Logger to use
         """
-        self.logger = logger or LoggingUtils.setup_logger("health_check")
+        log_file = LoggingUtils.health_check_log_path()
+        self.logger = logger or LoggingUtils.setup_logger(
+            "health_check",
+            log_file=log_file,
+            console=False,
+            json_format=True,
+        )
         self.monitoring = False
         self.monitor_thread = None
         self.monitor_interval = 300  # Default interval of 5 minutes
