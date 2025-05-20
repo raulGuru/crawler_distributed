@@ -107,6 +107,7 @@ class DomainSpider(BaseSpider):
         self.currently_crawling = set()
         self.crawled_urls = set()  # Track unique URLs that have been crawled
         self.unique_pages_crawled = 0  # Track unique pages crawled
+        self.enqueued_urls = set()  # Track URLs currently in the queue
 
         # Set allowed domains to restrict crawling
         self.allowed_domains = [domain]
@@ -172,13 +173,15 @@ class DomainSpider(BaseSpider):
             return
 
         # Continue with normal enqueuing for non-skipped URLs
-        if url not in self.url_queue and url not in self.currently_crawling:
+        in_queue = url in self.enqueued_urls
+        if not in_queue and url not in self.currently_crawling and url not in self.crawled_urls:
             if len(self.url_queue) < self.queue_size:
                 self.url_queue.append({
                     'url': url,
                     'callback': callback or self.parse,
                     'meta': meta or {}
                 })
+                self.enqueued_urls.add(url)
             else:
                 logger.warning(f"URL queue full ({self.queue_size} items), skipping: {url}")
 
@@ -191,8 +194,11 @@ class DomainSpider(BaseSpider):
         if isinstance(url_data, str):
             url_data = {'url': url_data}
 
-        if url_data['url'] not in self.currently_crawling:
-            self.currently_crawling.add(url_data['url'])
+        url = url_data['url']
+        self.enqueued_urls.discard(url)
+
+        if url not in self.currently_crawling:
+            self.currently_crawling.add(url)
             return url_data
         return None
 
