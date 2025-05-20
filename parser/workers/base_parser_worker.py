@@ -62,8 +62,8 @@ class BaseParserWorker(abc.ABC):
 
         self._setup_logging()
 
-        self.mongodb_client = MongoDBClient()
-        self.queue_manager = QueueManager(host=QUEUE_HOST, port=QUEUE_PORT)
+        self.mongodb_client = MongoDBClient(logger=self.logger)
+        self.queue_manager = QueueManager(host=QUEUE_HOST, port=QUEUE_PORT, logger=self.logger)
         # Initialize the base extractor
         self.extractor = BaseExtractor()
 
@@ -84,15 +84,16 @@ class BaseParserWorker(abc.ABC):
 
     def _setup_logging(self):
         logger_name = f"parser_worker.{self.task_type}.{self.instance_id}"
-        sanitized_task_type_for_filename = self.task_type.replace('/', '_')
-        log_file_name = f"{sanitized_task_type_for_filename}_{self.instance_id}.log"
-        full_log_file_path = os.path.join(LOG_DIR, log_file_name)
+        full_log_file_path = LoggingUtils.parser_worker_log_path(
+            self.task_type, self.instance_id
+        )
 
         self.logger = LoggingUtils.setup_logger(
             name=logger_name,
             log_file=full_log_file_path,
             level=logging.INFO,
-            console=False
+            console=False,
+            json_format=True,
         )
         self.logger.propagate = False
         self.logger.info(f"[{self.worker_name}] Logging for {logger_name} (instance {self.instance_id}) initialized. Log file: {full_log_file_path}. Propagation set to False.")

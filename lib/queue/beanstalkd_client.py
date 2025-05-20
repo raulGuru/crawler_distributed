@@ -1,4 +1,5 @@
 import logging
+from lib.utils.logging_utils import LoggingUtils
 import greenstalk
 
 
@@ -7,11 +8,14 @@ class BeanstalkdClient:
     Wrapper for beanstalkd client with connection pooling and error handling
     """
 
-    def __init__(self, host='localhost', port=11300, connect_timeout=5):
+    def __init__(self, host='localhost', port=11300, connect_timeout=5, logger=None):
         self.host = host
         self.port = port
         self.connect_timeout = connect_timeout
-        self.logger = logging.getLogger(self.__class__.__name__)
+        if logger is None:
+            self.logger = LoggingUtils.setup_logger(self.__class__.__name__.lower(), console=False)
+        else:
+            self.logger = logger
         self.connection = None
         self.current_tube = None
         self._connect()

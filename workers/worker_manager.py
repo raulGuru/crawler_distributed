@@ -4,6 +4,9 @@ import subprocess
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from lib.utils.logging_utils import LoggingUtils
+from config.parser_settings import ALL_PARSER_TASK_TYPES
+
 
 class WorkerManager:
     """
@@ -43,7 +46,15 @@ class WorkerManager:
         # )
         # if worker_name not in ['crawl_job_listener']:
         #     cmd.extend(['--db-uri', self.db_uri])
-        log_file_path = os.path.join(self.log_dir, f"{worker_name}_{instance_id}.log")
+
+        if worker_name == 'crawl_job_listener':
+            log_file_path = LoggingUtils.crawl_listener_log_path(instance_id)
+        elif worker_name in ALL_PARSER_TASK_TYPES:
+            log_file_path = LoggingUtils.parser_worker_log_path(worker_name, instance_id)
+        else:
+            log_file_path = os.path.join(self.log_dir, f"{worker_name}_{instance_id}.log")
+
+        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
         process = None
         with open(log_file_path, "a") as stdout_target:
             self.logger.info(

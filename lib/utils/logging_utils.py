@@ -1,5 +1,6 @@
 import os
 import logging
+import logging.handlers
 import json
 from datetime import datetime
 from functools import wraps
@@ -14,10 +15,33 @@ class LoggingUtils:
     Provides utilities for structured logging across the distributed crawler system
     """
 
+    class JsonFormatter(logging.Formatter):
+        """Simple JSON log formatter"""
+
+        def format(self, record):
+            log_record = {
+                "time": self.formatTime(record, self.datefmt),
+                "name": record.name,
+                "level": record.levelname,
+                "message": record.getMessage(),
+            }
+            for attr in ("job_id", "crawl_id"):
+                if hasattr(record, attr):
+                    log_record[attr] = getattr(record, attr)
+            return json.dumps(log_record)
+
     @staticmethod
-    def setup_logger(name, log_file=None, level=logging.INFO, console=True):
+    def setup_logger(
+        name,
+        log_file=None,
+        level=logging.INFO,
+        console=True,
+        json_format=False,
+        when='midnight',
+        backup_count=7,
+    ):
         """
-        Set up a logger with file and optional console handlers
+        Set up a logger with file and optional console handlers and rotation
 
         Args:
             name (str): Logger name
@@ -37,20 +61,24 @@ class LoggingUtils:
         logger.setLevel(level)
 
         # Remove any existing handlers
-        while logger.handlers:
-            logger.handlers.pop()
+        logger.handlers.clear()
 
         # Determine log file if not provided
         if log_file is None:
             log_file = os.path.join(LOG_DIR, f"{name}.log")
 
         # Create formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        if json_format:
+            formatter = LoggingUtils.JsonFormatter()
+        else:
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
 
-        # Create file handler
-        file_handler = logging.FileHandler(log_file)
+        # Create file handler with rotation
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            log_file, when=when, backupCount=backup_count, encoding='utf-8'
+        )
         file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
@@ -64,24 +92,6 @@ class LoggingUtils:
 
         return logger
 
-    @staticmethod
-    def log_exception(logger, e, message=None):
-        """
-        Log an exception with traceback
-
-        Args:
-            logger (logging.Logger): Logger to use
-            e (Exception): Exception to log
-            message (str, optional): Additional message
-        """
-        exc_info = sys.exc_info()
-        tb_lines = traceback.format_exception(*exc_info)
-        tb_str = ''.join(tb_lines)
-
-        if message:
-            logger.error(f"{message}: {str(e)}\n{tb_str}")
-        else:
-            logger.error(f"Exception: {str(e)}\n{tb_str}")
 
     @staticmethod
     def log_context(func=None, logger=None, level=logging.INFO):
@@ -181,6 +191,43 @@ class LoggingUtils:
             return f"{prefix} {message}"
         else:
             return message
+
+    # ------------------------------------------------------------------
+    # Log file path helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def crawl_listener_log_path(instance_number: int) -> str:
+        dir_path = os.path.join(LOG_DIR, "crawl_job_listeners")
+        os.makedirs(dir_path, exist_ok=True)
+        return os.path.join(dir_path, f"listener_{instance_number}.log")
+
+    @staticmethod
+    def scrapy_log_path(domain: str, crawl_id: str) -> str:
+        dir_path = os.path.join(LOG_DIR, "scrapy_logs")
+        os.makedirs(dir_path, exist_ok=True)
+        sanitized_domain = str(domain).replace('/', '_') if domain else "unknown"
+        return os.path.join(dir_path, f"{sanitized_domain}_{crawl_id}.log")
+
+    @staticmethod
+    def submit_job_log_path(domain: str) -> str:
+        dir_path = os.path.join(LOG_DIR, "submit_crawl_jobs")
+        os.makedirs(dir_path, exist_ok=True)
+        sanitized_domain = str(domain).replace('/', '_') if domain else "unknown"
+        return os.path.join(dir_path, f"{sanitized_domain}.log")
+
+    @staticmethod
+    def parser_worker_log_path(task_type: str, instance_number: int) -> str:
+        dir_path = os.path.join(LOG_DIR, "parser_workers")
+        os.makedirs(dir_path, exist_ok=True)
+        sanitized = str(task_type).replace('/', '_')
+        return os.path.join(dir_path, f"{sanitized}_{instance_number}.log")
+
+    @staticmethod
+    def health_check_log_path() -> str:
+        dir_path = os.path.join(LOG_DIR, "health_checks")
+        os.makedirs(dir_path, exist_ok=True)
+        return os.path.join(dir_path, "health_check.log")
 
     @staticmethod
     def get_job_specific_logger(base_logger, job_id=None, crawl_id=None, log_dir=None, **other_ids):

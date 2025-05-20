@@ -12,20 +12,18 @@ import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION, QUEUE_TTR
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION, QUEUE_TTR
 from lib.storage.mongodb_client import MongoDBClient
+from lib.utils.logging_utils import LoggingUtils
 
 def setup_logging(domain):
-    domain = domain.replace('/', '_')
-    log_filename = f"submit_{domain}.log"
-    log_path = os.path.join(LOG_DIR, log_filename)
-    logging.basicConfig(
+    log_path = LoggingUtils.submit_job_log_path(domain)
+    LoggingUtils.setup_logger(
+        name="submit_crawl_job",
+        log_file=log_path,
         level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(log_path, mode='a', encoding='utf-8')
-        ]
+        console=True,
+        json_format=True,
     )
 
 def extract_domain_from_url(url):
@@ -72,7 +70,7 @@ def submit_crawl_job(args):
     logger = logging.getLogger(__name__)
 
     # Initialize MongoDB client early
-    mongodb_client = MongoDBClient()
+    mongodb_client = MongoDBClient(logger=logger)
     final_crawl_id = None
     is_new_task = True
 
@@ -153,7 +151,7 @@ def submit_crawl_job(args):
 
     logger.info(f"Preparing to enqueue crawl job for {current_domain} with crawl_id {final_crawl_id}")
 
-    queue_manager = QueueManager(host=queue_host, port=queue_port)
+    queue_manager = QueueManager(host=queue_host, port=queue_port, logger=logger)
     beanstalkd_job_id = None
     try:
         beanstalkd_job_id = queue_manager.enqueue_job(
