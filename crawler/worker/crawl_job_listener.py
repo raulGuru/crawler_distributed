@@ -22,6 +22,7 @@ from config.base_settings import (
 )
 from lib.storage.mongodb_client import MongoDBClient
 from crawler.worker.crawl_job_processor import CrawlJobProcessor
+from lib.utils.logging_utils import LoggingUtils
 
 
 class CrawlJobListener:
@@ -48,21 +49,15 @@ class CrawlJobListener:
         self.toucher_active_event = threading.Event()
 
     def _setup_logging(self):
-        logger = logging.getLogger(f"CrawlJobListener_{self.instance_id}")
-        logger.setLevel(logging.INFO)
-        if not logger.handlers:  # Only add handlers if none exist
-            os.makedirs(LOG_DIR, exist_ok=True)
-            log_file = os.path.join(
-                LOG_DIR, f"crawl_job_listener_{self.instance_id}.log"
-            )
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-            # Do NOT add a StreamHandler to avoid duplicate logs
+        log_file = LoggingUtils.crawl_listener_log_path(self.instance_id)
+        logger = LoggingUtils.setup_logger(
+            name=f"CrawlJobListener_{self.instance_id}",
+            log_file=log_file,
+            level=None,
+            console=False,
+            json_format=False,
+        )
+        logger.propagate = False
         return logger
 
     def _handle_signal(self, signum, frame):
@@ -77,9 +72,11 @@ class CrawlJobListener:
         try:
             self.logger.info("Initializing components")
             self.queue_manager = QueueManager(
-                host=self.queue_host, port=self.queue_port
+                host=self.queue_host,
+                port=self.queue_port,
+                logger=self.logger,
             )
-            self.mongodb_client = MongoDBClient()
+            self.mongodb_client = MongoDBClient(logger=self.logger)
             self.crawl_job_processor = CrawlJobProcessor(
                 logger=self.logger,
                 mongodb_client=self.mongodb_client,

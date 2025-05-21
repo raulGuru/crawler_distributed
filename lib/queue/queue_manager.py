@@ -1,9 +1,9 @@
 from contextlib import closing
-import logging
+from lib.utils.logging_utils import LoggingUtils
 from greenstalk import NotIgnoredError
 from datetime import datetime
 
-from config.base_settings import QUEUE_CRAWL_TUBE, QUEUE_PARSE_TUBE, QUEUE_MONITOR_TUBE, MONGO_CRAWL_JOB_COLLECTION
+from config.base_settings import QUEUE_CRAWL_TUBE, MONGO_CRAWL_JOB_COLLECTION
 from .beanstalkd_client import BeanstalkdClient
 from .job_serializer import JobSerializer
 
@@ -16,8 +16,6 @@ class QueueManager:
     # Default tube names
     DEFAULT_TUBES = {
         'crawl': QUEUE_CRAWL_TUBE,
-        'parse': QUEUE_PARSE_TUBE,
-        'monitor': QUEUE_MONITOR_TUBE
     }
 
     # Default priorities (lower is higher priority)
@@ -27,10 +25,13 @@ class QueueManager:
         'low': 1000
     }
 
-    def __init__(self, host='localhost', port=11300):
+    def __init__(self, host='localhost', port=11300, logger=None):
         self.host = host
         self.port = port
-        self.logger = logging.getLogger(self.__class__.__name__)
+        if logger is None:
+            self.logger = LoggingUtils.setup_logger(self.__class__.__name__.lower(), console=False)
+        else:
+            self.logger = logger
         self.client = None
         self.serializer = JobSerializer()
         self._initialize_client()
@@ -38,7 +39,7 @@ class QueueManager:
     def _initialize_client(self):
         """Initialize beanstalkd client"""
         try:
-            self.client = BeanstalkdClient(host=self.host, port=self.port)
+            self.client = BeanstalkdClient(host=self.host, port=self.port, logger=self.logger)
             self.logger.info(f"Queue manager initialized with beanstalkd at {self.host}:{self.port}")
         except Exception as e:
             self.logger.error(f"Failed to initialize queue manager: {str(e)}")
@@ -238,8 +239,6 @@ class QueueManager:
         """Call the safe helper for each known tube."""
         for tube in (
             QUEUE_CRAWL_TUBE,
-            QUEUE_PARSE_TUBE,
-            QUEUE_MONITOR_TUBE,
         ):
             try:
                 self._purge_with_fresh_client(tube, crawl_id)
@@ -248,7 +247,7 @@ class QueueManager:
 
     def _purge_with_fresh_client(self, tube: str, crawl_id: str | None) -> None:
         """Delete READY jobs that match *crawl_id* using a short-lived connection."""
-        with closing(BeanstalkdClient(self.host, self.port)) as tmp:
+        with closing(BeanstalkdClient(self.host, self.port, logger=self.logger)) as tmp:
             tmp.watch_tube(tube)
             try:
                 tmp.ignore_tube("default")

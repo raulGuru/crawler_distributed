@@ -22,9 +22,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 HTML_DIR = os.path.join(DATA_DIR, 'html')
 LOG_DIR = os.path.join(DATA_DIR, 'logs')
+INTEGRATION_SERVICE_LOG_DIR = os.path.join(LOG_DIR, 'integration_service')
+SUBMIT_CRAWL_JOBS_DIR = os.path.join(LOG_DIR, 'submit_crawl_jobs')
+CRAWL_JOB_LISTENERS_DIR = os.path.join(LOG_DIR, 'crawl_job_listeners')
+SCRAPY_LOGS_DIR = os.path.join(LOG_DIR, 'scrapy_logs')
+PARSER_WORKERS_DIR = os.path.join(LOG_DIR, 'parser_workers')
+HEALTH_CHECKS_DIR = os.path.join(LOG_DIR, 'health_checks')
 
 # Create directories if they don't exist
-for directory in [DATA_DIR, HTML_DIR, LOG_DIR]:
+for directory in [DATA_DIR, HTML_DIR, LOG_DIR, INTEGRATION_SERVICE_LOG_DIR, SUBMIT_CRAWL_JOBS_DIR, PARSER_WORKERS_DIR, CRAWL_JOB_LISTENERS_DIR, HEALTH_CHECKS_DIR, SCRAPY_LOGS_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 # Logging configuration
@@ -59,17 +65,24 @@ MONGO_USER = os.environ.get('MONGO_USER', '')
 MONGO_PASSWORD = os.environ.get('MONGO_PASSWORD', '')
 MONGO_AUTH_SOURCE = os.environ.get('MONGO_AUTH_SOURCE', 'admin')
 MONGO_URI = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}?authSource={MONGO_AUTH_SOURCE}" if MONGO_USER else f"mongodb://{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}"
-MONGO_CRAWL_JOB_COLLECTION = 'crawl_jobs'
-MONGO_PARSE_JOB_COLLECTION = 'parse_jobs'
+MONGO_CRAWL_JOB_COLLECTION = os.environ.get('MONGO_CRAWL_JOB_COLLECTION', 'crawler_crawl_jobs')
 
 # Beanstalkd queue configuration
 QUEUE_HOST = os.environ.get('QUEUE_HOST', 'localhost')
 QUEUE_PORT = int(os.environ.get('QUEUE_PORT', 11300))
-QUEUE_TUBES = ['crawl_jobs', 'parse_jobs', 'monitor_jobs']
-QUEUE_CRAWL_TUBE = os.environ.get('QUEUE_CRAWL_TUBE', 'crawl_jobs')
-QUEUE_PARSE_TUBE = os.environ.get('QUEUE_PARSE_TUBE', 'parse_jobs')
-QUEUE_MONITOR_TUBE = os.environ.get('QUEUE_MONITOR_TUBE', 'monitor_jobs')
+QUEUE_CRAWL_TUBE = os.environ.get('QUEUE_CRAWL_TUBE', 'crawler_crawl_jobs')
 QUEUE_TTR = int(os.environ.get('QUEUE_TTR', 300))
+
+# Core workers
+CORE_WORKERS = {
+        'crawl_job_listener': {
+            'script': CRAWLER_JOB_LISTENER_PATH,
+            'required': True,  # System requires this worker
+            'instances': CRAWLER_INSTANCES,    # Number of instances to run
+            'restart': True,   # Auto-restart if it crashes
+            'args': []         # Additional command line arguments
+        }
+    }
 
 # General settings
 HOSTNAME = socket.gethostname()

@@ -57,8 +57,8 @@ class GoogleAnalyticsWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_google_analytics_extraction_tube",
-            task_type="google_analytics_extraction",
+            tube_name="crawler_htmlparser_google_analytics_tube",
+            task_type="google_analytics",
             instance_id=instance_id,
         )
 

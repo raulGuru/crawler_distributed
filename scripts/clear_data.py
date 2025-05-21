@@ -3,10 +3,15 @@ from pymongo import MongoClient
 import os
 import greenstalk
 import psutil
+import shutil
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, QUEUE_TUBES as BASE_QUEUE_TUBES, DATA_DIR, HTML_DIR, LOG_DIR, MONGO_URI
+from config.base_settings import (
+    QUEUE_HOST, QUEUE_PORT, QUEUE_CRAWL_TUBE, HTML_DIR, LOG_DIR, MONGO_URI,
+    INTEGRATION_SERVICE_LOG_DIR, SUBMIT_CRAWL_JOBS_DIR, CRAWL_JOB_LISTENERS_DIR,
+    SCRAPY_LOGS_DIR, PARSER_WORKERS_DIR, HEALTH_CHECKS_DIR
+)
 from config.parser_settings import ALL_PARSER_TASK_TYPES
 
 def clear_mongodb():
@@ -14,117 +19,120 @@ def clear_mongodb():
     print("Clearing MongoDB collections...")
     client = MongoClient(MONGO_URI)
     db = client.get_database()
-
-    # Print collections before clearing
     collections = db.list_collection_names()
     print(f"Found collections: {collections}")
-
-    # Clear each collection
     for collection in collections:
         count = db[collection].count_documents({})
         db[collection].delete_many({})
         print(f"Cleared {count} documents from {collection}")
-
     print("MongoDB collections cleared.")
 
 def clear_beanstalkd():
     """Clear all jobs from Beanstalkd queue"""
     print("Clearing Beanstalkd queues...")
-
     try:
-        # Connect to Beanstalkd - greenstalk uses address instead of host/port
         client = greenstalk.Client((QUEUE_HOST, QUEUE_PORT))
-
-        # Construct the full list of tubes to clear
-        parser_task_tubes = [f"htmlparser_{task_type}_tube" for task_type in ALL_PARSER_TASK_TYPES.keys()]
-        all_tubes_to_clear = list(set(BASE_QUEUE_TUBES + parser_task_tubes))
+        parser_task_tubes = [f"crawler_htmlparser_{task_type}_tube" for task_type in ALL_PARSER_TASK_TYPES.keys()]
+        # QUEUE_CRAWL_TUBE may be a string or list; normalize to list
+        if isinstance(QUEUE_CRAWL_TUBE, str):
+            all_tubes_to_clear = [QUEUE_CRAWL_TUBE] + parser_task_tubes
+        else:
+            all_tubes_to_clear = list(set(list(QUEUE_CRAWL_TUBE) + parser_task_tubes))
         print(f"Targeting Beanstalkd tubes for clearing: {all_tubes_to_clear}")
-
         for tube in all_tubes_to_clear:
             try:
-                # Switch to the tube
                 client.use(tube)
                 client.watch(tube)
-
-                # Clear jobs
                 jobs_cleared = 0
                 while True:
                     try:
-                        # Try to reserve a job with a timeout of 0 seconds
                         job = client.reserve(timeout=0)
                         if job:
                             client.delete(job)
                             jobs_cleared += 1
-                        else: # No more jobs in this tube
+                        else:
                             break
                     except greenstalk.TimedOutError:
-                        # No more jobs to reserve
                         break
-                    except greenstalk.NotFoundError: # Tube might be empty or just created
+                    except greenstalk.NotFoundError:
                         print(f"Tube {tube} not found or empty during reserve, skipping.")
                         break
                     except Exception as e_reserve:
                         print(f"Error processing job in tube {tube}: {str(e_reserve)}")
-                        break # For safety, break from this tube's loop
-
+                        break
                 print(f"Cleared {jobs_cleared} jobs from tube {tube}")
                 try:
                     client.ignore(tube)
                 except greenstalk.NotFoundError:
                     pass
-
             except greenstalk.NotFoundError:
                 print(f"Tube {tube} not found, skipping.")
             except Exception as e:
                 print(f"Error clearing tube {tube}: {str(e)}")
-
         client.close()
         print("Beanstalkd queues cleared.")
-
     except Exception as e:
         print(f"Error connecting to Beanstalkd: {str(e)}")
 
-import shutil
-
 def clear_html_files():
-    """Clear all HTML files from the data directory"""
+    """Clear all HTML files and subdirectories from the HTML_DIR directory (per new config)"""
     print("Clearing HTML files...")
-
-    html_dir = os.path.join(DATA_DIR, HTML_DIR)
+    html_dir = HTML_DIR
     if os.path.exists(html_dir):
-        # Get subdirectories (domains)
         domains = [d for d in os.listdir(html_dir)
                   if os.path.isdir(os.path.join(html_dir, d))]
-
+        total_files = 0
+        total_dirs = 0
         for domain in domains:
             domain_dir = os.path.join(html_dir, domain)
-            print(f"Clearing HTML files for {domain}")
-
-            # Count files and directories before deletion
             file_count, dir_count = _count_files_and_dirs(domain_dir)
-            print(f"Found {file_count} files and {dir_count} subdirectories in {domain}")
-
-            # Remove entire directory tree recursively
+            total_files += file_count
+            total_dirs += dir_count + 1  # include the domain dir itself
             shutil.rmtree(domain_dir)
-            print(f"Successfully cleared {domain} directory ({file_count} files, {dir_count} subdirectories)")
-
-        print("HTML files cleared.")
+            print(f"  Cleared {file_count} files, {dir_count+1} dirs in {domain}")
+        print(f"HTML: Cleared {total_files} files and {total_dirs} directories in total.")
     else:
         print(f"HTML directory {html_dir} not found.")
 
 def _count_files_and_dirs(directory):
-    """Count total files and subdirectories in a directory tree"""
     file_count = 0
     dir_count = 0
-
-    # Walk through directory tree to count files and directories
     for root, dirs, files in os.walk(directory):
         file_count += len(files)
-        # Don't count the root directory itself, only subdirectories
         if root != directory:
             dir_count += 1
-
     return file_count, dir_count
+
+def clear_log_files():
+    """Clear all log files and subdirectories in LOG_DIR (per new config)"""
+    print("Clearing log files...")
+    log_dirs = [LOG_DIR, INTEGRATION_SERVICE_LOG_DIR, SUBMIT_CRAWL_JOBS_DIR, CRAWL_JOB_LISTENERS_DIR, SCRAPY_LOGS_DIR, PARSER_WORKERS_DIR, HEALTH_CHECKS_DIR]
+    total_files = 0
+    total_dirs = 0
+    for log_dir in log_dirs:
+        if os.path.exists(log_dir):
+            # Remove all subdirs and files inside log_dir, but not log_dir itself
+            for entry in os.listdir(log_dir):
+                entry_path = os.path.join(log_dir, entry)
+                if os.path.isfile(entry_path):
+                    try:
+                        os.remove(entry_path)
+                        total_files += 1
+                    except Exception as e:
+                        print(f"Could not remove file {entry_path}: {str(e)}")
+                elif os.path.isdir(entry_path):
+                    try:
+                        sub_file_count, sub_dir_count = _count_files_and_dirs(entry_path)
+                        shutil.rmtree(entry_path)
+                        total_files += sub_file_count
+                        total_dirs += sub_dir_count + 1  # include the subdir itself
+                        print(f"  Cleared {sub_file_count} files, {sub_dir_count+1} dirs in {entry_path}")
+                    except Exception as e:
+                        print(f"Could not remove dir {entry_path}: {str(e)}")
+            print(f"Log: Cleared files and subdirs in {log_dir}.")
+        else:
+            print(f"Log directory {log_dir} not found.")
+    print(f"Logs: Cleared {total_files} files and {total_dirs} directories in total.")
 
 def kill_related_python_processes():
     """Kill all Python processes related to the crawler project"""
@@ -143,22 +151,6 @@ def kill_related_python_processes():
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     print(f"Killed {killed} related Python processes.")
-
-def clear_log_files():
-    """Clear all log files including integration_service.log"""
-    print("Clearing log files...")
-    log_dir = os.path.join(DATA_DIR, LOG_DIR)
-    if os.path.exists(log_dir):
-        current_files = os.listdir(log_dir)
-        for file in current_files:
-            file_path = os.path.join(log_dir, file)
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                print(f"Could not remove {file}: {str(e)}")
-        print(f"Cleared {len(current_files)} log files.")
-    else:
-        print(f"Log directory {log_dir} not found.")
 
 if __name__ == "__main__":
     print("Clearing all data to start fresh...")

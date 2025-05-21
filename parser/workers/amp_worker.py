@@ -35,8 +35,8 @@ class AmpDataWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_amp_extraction_tube",
-            task_type="amp_extraction",
+            tube_name="crawler_htmlparser_amp_tube",
+            task_type="amp",
             instance_id=instance_id,
         )
 

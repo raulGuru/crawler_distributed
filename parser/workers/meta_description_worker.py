@@ -35,8 +35,8 @@ class MetaDescriptionWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_meta_description_extraction_tube",
-            task_type="meta_description_extraction",
+            tube_name="crawler_htmlparser_meta_description_tube",
+            task_type="meta_description",
             instance_id=instance_id,
         )
 

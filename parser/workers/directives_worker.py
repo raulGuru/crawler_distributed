@@ -35,8 +35,8 @@ class DirectivesWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_directives_extraction_tube",
-            task_type="directives_extraction",
+            tube_name="crawler_htmlparser_directives_tube",
+            task_type="directives",
             instance_id=instance_id,
         )
 

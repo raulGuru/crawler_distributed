@@ -78,10 +78,10 @@ def dispatch_jobs(
 
             current_priority = task_specific_config.get("priority")
             current_ttr = task_specific_config.get("ttr")
-            tube_name = f"htmlparser_{task_name_key}_tube"
+            tube_name = f"crawler_htmlparser_{task_name_key}_tube"
 
             try:
-                queue_manager = QueueManager(host=QUEUE_HOST, port=QUEUE_PORT)
+                queue_manager = QueueManager(host=QUEUE_HOST, port=QUEUE_PORT, logger=logger)
 
                 job_id_from_beanstalkd = queue_manager.enqueue_job(
                     job_data=job_payload,
@@ -116,7 +116,7 @@ def dispatch_jobs(
             logger.info(f"Successfully dispatched all {jobs_dispatched_count} parser jobs for doc_id {document_str_id} ({source_url}).")
 
         try:
-            mongodb_client_for_update = MongoDBClient()
+            mongodb_client_for_update = MongoDBClient(logger=logger)
             update_payload = {
                 '$set': {
                     'processing_status': 'dispatch_complete',

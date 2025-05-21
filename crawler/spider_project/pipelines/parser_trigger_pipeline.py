@@ -98,7 +98,7 @@ class ParserTriggerPipeline:
         parser_unique_id = None
 
         try:
-            mongodb_client = MongoDBClient()
+            mongodb_client = MongoDBClient(logger=self.logger)
             parser_doc_for_insertion = {
                 **base_parser_data,
                 'processing_status': 'pending_dispatch',
