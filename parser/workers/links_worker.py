@@ -35,8 +35,8 @@ class LinksWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_links_extraction_tube",
-            task_type="links_extraction",
+            tube_name="crawler_htmlparser_links_tube",
+            task_type="links",
             instance_id=instance_id,
         )
 

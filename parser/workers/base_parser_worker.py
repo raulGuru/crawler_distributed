@@ -91,9 +91,9 @@ class BaseParserWorker(abc.ABC):
         self.logger = LoggingUtils.setup_logger(
             name=logger_name,
             log_file=full_log_file_path,
-            level=logging.INFO,
+            level=None,
             console=False,
-            json_format=True,
+            json_format=False,
         )
         self.logger.propagate = False
         self.logger.info(f"[{self.worker_name}] Logging for {logger_name} (instance {self.instance_id}) initialized. Log file: {full_log_file_path}. Propagation set to False.")

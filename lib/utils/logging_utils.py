@@ -5,9 +5,8 @@ import json
 from datetime import datetime
 from functools import wraps
 import traceback
-import sys
 
-from config.base_settings import LOG_DIR
+from config.base_settings import LOG_DIR, LOG_LEVEL, LOG_FORMAT
 
 
 class LoggingUtils:
@@ -34,7 +33,7 @@ class LoggingUtils:
     def setup_logger(
         name,
         log_file=None,
-        level=logging.INFO,
+        level=None,
         console=True,
         json_format=False,
         when='midnight',
@@ -58,6 +57,8 @@ class LoggingUtils:
 
         # Set up logger
         logger = logging.getLogger(name)
+        if level is None:
+            level = LOG_LEVEL
         logger.setLevel(level)
 
         # Remove any existing handlers
@@ -72,7 +73,7 @@ class LoggingUtils:
             formatter = LoggingUtils.JsonFormatter()
         else:
             formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                LOG_FORMAT
             )
 
         # Create file handler with rotation
@@ -228,6 +229,12 @@ class LoggingUtils:
         dir_path = os.path.join(LOG_DIR, "health_checks")
         os.makedirs(dir_path, exist_ok=True)
         return os.path.join(dir_path, "health_check.log")
+
+    @staticmethod
+    def integration_service_log_path() -> str:
+        dir_path = os.path.join(LOG_DIR, "integration_service")
+        os.makedirs(dir_path, exist_ok=True)
+        return os.path.join(dir_path, "integration_service.log")
 
     @staticmethod
     def get_job_specific_logger(base_logger, job_id=None, crawl_id=None, log_dir=None, **other_ids):

@@ -12,18 +12,17 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from lib.queue.queue_manager import QueueManager
 from lib.storage.mongodb_client import MongoDBClient
-from lib.utils.logging_utils import LoggingUtils
 from lib.utils.health_check import HealthCheck
+from lib.utils.logging_utils import LoggingUtils
+from workers.worker_manager import WorkerManager
 from config.base_settings import (
     QUEUE_HOST, QUEUE_PORT, MONGO_URI, LOG_DIR,
-    CRAWLER_JOB_LISTENER_PATH,
     PROJECT_ROOT,
-    CRAWLER_INSTANCES
+    CORE_WORKERS
 )
 from config.parser_settings import (
     ALL_PARSER_TASK_TYPES
 )
-from workers.worker_manager import WorkerManager
 
 
 class IntegrationService:
@@ -31,22 +30,6 @@ class IntegrationService:
     Service that coordinates all workers and handles their lifecycle
     """
 
-    CORE_WORKERS = {
-        'crawl_job_listener': {
-            'script': CRAWLER_JOB_LISTENER_PATH,
-            'required': True,  # System requires this worker
-            'instances': CRAWLER_INSTANCES,    # Number of instances to run
-            'restart': True,   # Auto-restart if it crashes
-            'args': []         # Additional command line arguments
-        },
-        # 'monitor_worker': {
-        #     'script': MONITOR_WORKER_PATH,
-        #     'required': True,
-        #     'instances': 1,
-        #     'restart': True,
-        #     'args': []
-        # }
-    }
 
     def __init__(self, queue_host: str = QUEUE_HOST, queue_port: int = QUEUE_PORT, mongo_uri: str = MONGO_URI,
                  health_check_interval: int = 60) -> None:
@@ -63,7 +46,7 @@ class IntegrationService:
         self.queue_port = queue_port
         self.mongo_uri = mongo_uri
         self.health_check_interval = health_check_interval
-        self.logger = LoggingUtils.setup_logger('integration_service')
+        self.logger = self._setup_logging()
         self.mongodb_client = None
         self.queue_manager = None
         self.health_check = None
@@ -86,9 +69,21 @@ class IntegrationService:
         if not os.path.exists(LOG_DIR):
             os.makedirs(LOG_DIR, exist_ok=True)
 
+    def _setup_logging(self):
+        log_file = LoggingUtils.integration_service_log_path()
+        logger = LoggingUtils.setup_logger(
+            name="integration_service",
+            log_file=log_file,
+            level=None,
+            console=True,
+            json_format=False,
+        )
+        logger.propagate = False
+        return logger
+
     def _generate_worker_configurations(self) -> dict:
         """Generates the full worker configuration dictionary including parser workers."""
-        combined_workers = self.CORE_WORKERS.copy()
+        combined_workers = CORE_WORKERS.copy()
         self.logger.info(f"Found {len(ALL_PARSER_TASK_TYPES)} parser task types to configure.")
 
         for task_type, task_details in ALL_PARSER_TASK_TYPES.items():

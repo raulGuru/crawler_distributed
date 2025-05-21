@@ -1,10 +1,9 @@
 from contextlib import closing
-import logging
 from lib.utils.logging_utils import LoggingUtils
 from greenstalk import NotIgnoredError
 from datetime import datetime
 
-from config.base_settings import QUEUE_CRAWL_TUBE, QUEUE_PARSE_TUBE, QUEUE_MONITOR_TUBE, MONGO_CRAWL_JOB_COLLECTION
+from config.base_settings import QUEUE_CRAWL_TUBE, MONGO_CRAWL_JOB_COLLECTION
 from .beanstalkd_client import BeanstalkdClient
 from .job_serializer import JobSerializer
 
@@ -17,8 +16,6 @@ class QueueManager:
     # Default tube names
     DEFAULT_TUBES = {
         'crawl': QUEUE_CRAWL_TUBE,
-        'parse': QUEUE_PARSE_TUBE,
-        'monitor': QUEUE_MONITOR_TUBE
     }
 
     # Default priorities (lower is higher priority)
@@ -242,8 +239,6 @@ class QueueManager:
         """Call the safe helper for each known tube."""
         for tube in (
             QUEUE_CRAWL_TUBE,
-            QUEUE_PARSE_TUBE,
-            QUEUE_MONITOR_TUBE,
         ):
             try:
                 self._purge_with_fresh_client(tube, crawl_id)

@@ -53,9 +53,9 @@ class CrawlJobListener:
         logger = LoggingUtils.setup_logger(
             name=f"CrawlJobListener_{self.instance_id}",
             log_file=log_file,
-            level=logging.INFO,
+            level=None,
             console=False,
-            json_format=True,
+            json_format=False,
         )
         logger.propagate = False
         return logger

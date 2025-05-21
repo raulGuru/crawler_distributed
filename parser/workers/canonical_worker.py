@@ -41,8 +41,8 @@ class CanonicalWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_canonical_extraction_tube",
-            task_type="canonical_extraction",
+            tube_name="crawler_htmlparser_canonical_tube",
+            task_type="canonical",
             instance_id=instance_id,
         )
 

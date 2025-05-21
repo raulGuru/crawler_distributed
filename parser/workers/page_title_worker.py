@@ -35,8 +35,8 @@ class PageTitleWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_page_title_extraction_tube",
-            task_type="page_title_extraction",
+            tube_name="crawler_htmlparser_page_title_tube",
+            task_type="page_title",
             instance_id=instance_id,
         )
 

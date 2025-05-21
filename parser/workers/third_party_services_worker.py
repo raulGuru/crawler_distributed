@@ -33,8 +33,8 @@ class ThirdPartyServicesWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_third_party_services_extraction_tube",
-            task_type="third_party_services_extraction",
+            tube_name="crawler_htmlparser_third_party_services_tube",
+            task_type="third_party_services",
             instance_id=instance_id,
         )
 

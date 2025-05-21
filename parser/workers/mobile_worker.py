@@ -37,8 +37,8 @@ class MobileWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_mobile_extraction_tube",
-            task_type="mobile_extraction",
+            tube_name="crawler_htmlparser_mobile_tube",
+            task_type="mobile",
             instance_id=instance_id,
         )
 

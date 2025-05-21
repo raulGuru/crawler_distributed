@@ -39,8 +39,8 @@ class HeadingsWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_headings_extraction_tube",
-            task_type="headings_extraction",
+            tube_name="crawler_htmlparser_headings_tube",
+            task_type="headings",
             instance_id=instance_id,
         )
 

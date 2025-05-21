@@ -36,8 +36,8 @@ class StructuredWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_structured_extraction_tube",
-            task_type="structured_extraction",
+            tube_name="crawler_htmlparser_structured_tube",
+            task_type="structured",
             instance_id=instance_id,
         )
 

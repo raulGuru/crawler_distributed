@@ -3,7 +3,6 @@ import os
 import sys
 import argparse
 from datetime import datetime
-import logging
 from typing import Any, Dict
 from urllib.parse import urlparse
 import uuid
@@ -12,19 +11,20 @@ import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION, QUEUE_TTR
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, DEFAULT_MAX_PAGES, DEFAULT_SINGLE_URL, DEFAULT_USE_SITEMAP, MONGO_CRAWL_JOB_COLLECTION, QUEUE_TTR, QUEUE_CRAWL_TUBE
 from lib.storage.mongodb_client import MongoDBClient
 from lib.utils.logging_utils import LoggingUtils
 
 def setup_logging(domain):
     log_path = LoggingUtils.submit_job_log_path(domain)
-    LoggingUtils.setup_logger(
+    logger = LoggingUtils.setup_logger(
         name="submit_crawl_job",
         log_file=log_path,
-        level=logging.INFO,
+        level=None,
         console=True,
-        json_format=True,
+        json_format=False,
     )
+    return logger
 
 def extract_domain_from_url(url):
     """Extract domain from URL if URL is provided"""
@@ -67,7 +67,7 @@ def submit_crawl_job(args):
     """
     queue_host = args.queue_host
     queue_port = int(args.queue_port)
-    logger = logging.getLogger(__name__)
+    logger = setup_logging(args.domain)
 
     # Initialize MongoDB client early
     mongodb_client = MongoDBClient(logger=logger)
@@ -218,13 +218,12 @@ def main():
 
     parser.add_argument('--queue-host', default=QUEUE_HOST, help='Beanstalkd host')
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Beanstalkd port')
-    parser.add_argument('--tube', default=MONGO_CRAWL_JOB_COLLECTION, help='Beanstalkd tube (default: crawl_jobs)')
+    parser.add_argument('--tube', default=QUEUE_CRAWL_TUBE, help='Beanstalkd tube (default: crawl_jobs)')
     parser.add_argument('--priority', default='high', help='Job priority (high, normal, low)')
     parser.add_argument('--ttr', type=int, default=None, help=f'Beanstalkd Time-To-Run in seconds (default: {QUEUE_TTR} from .env)')
 
     args = parser.parse_args()
 
-    domain_for_log = args.domain
     if args.url and not args.domain:
         extracted_domain = extract_domain_from_url(args.url)
         if extracted_domain:
@@ -237,8 +236,6 @@ def main():
 
     if args.ttr is None:
         args.ttr = QUEUE_TTR
-
-    setup_logging(domain_for_log if domain_for_log else "unknown_submission")
 
     try:
         job_id_result = submit_crawl_job(args)

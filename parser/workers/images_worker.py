@@ -37,8 +37,8 @@ class ImagesWorker(BaseParserWorker):
             instance_id (int): Unique identifier for this worker instance.
         """
         super().__init__(
-            tube_name="htmlparser_images_extraction_tube",
-            task_type="images_extraction",
+            tube_name="crawler_htmlparser_images_tube",
+            task_type="images",
             instance_id=instance_id,
         )
 
