@@ -1,0 +1,7 @@
+.cursor/
+.scrapy/
+.venv/
+.clinerules
+__pycache__/
+.git/
+*.log
