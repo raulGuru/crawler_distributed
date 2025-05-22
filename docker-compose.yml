@@ -8,8 +8,8 @@ services:
     network_mode: "host"
     # Use env vars from file; can be overridden per-deploy
     env_file: .env
-    # volumes:
-    #   - ./data:/app/data  # Mount data directory from local to container
+    volumes:
+      - ./instance1_data:/app/data  # Mount data directory from local to container
     environment:
       - PYTHONPATH=/app
       - SCRAPY_SETTINGS_MODULE=crawler.spider_project.settings
