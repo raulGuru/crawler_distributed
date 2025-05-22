@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from config.parser_settings import ALL_PARSER_TASK_TYPES
 from lib.storage.mongodb_client import MongoDBClient
 from lib.queue.queue_manager import QueueManager
-from config.base_settings import QUEUE_HOST, QUEUE_PORT
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, MONGO_PARSED_HTML_COLLECTION
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def dispatch_jobs(
     Args:
         source_parser_item: Dictionary containing the core data from the crawl (URL, HTML path, etc.).
                             This is used as the base for job payloads.
-        document_mongo_id: The MongoDB ObjectId of the document in 'parsed_html_data'.
+        document_mongo_id: The MongoDB ObjectId of the document in MONGO_PARSED_HTML_COLLECTION.
                            Used for the final status update.
         document_str_id: The string representation of the MongoDB _id.
                          Used as 'document_id' in Beanstalkd job payloads.
@@ -129,7 +129,7 @@ def dispatch_jobs(
             }
             logger.debug(f"Attempting to update MongoDB for doc_id {document_str_id} (ObjectId: {document_mongo_id}) with payload: {update_payload}")
             mongodb_client_for_update.update_one(
-                'parsed_html_data',
+                MONGO_PARSED_HTML_COLLECTION,
                 {'_id': document_mongo_id},
                 update_payload
             )

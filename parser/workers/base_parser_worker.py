@@ -17,7 +17,7 @@ from lib.queue.queue_manager import QueueManager
 from lib.storage.mongodb_client import MongoDBClient
 from lib.utils.logging_utils import LoggingUtils
 from lib.utils.extractor_base import BaseExtractor
-from config.base_settings import QUEUE_HOST, QUEUE_PORT
+from config.base_settings import QUEUE_HOST, QUEUE_PORT, MONGO_PARSED_HTML_COLLECTION
 
 
 class RetryableError(Exception):
@@ -159,7 +159,7 @@ class BaseParserWorker(abc.ABC):
 
         try:
             db_result = self.mongodb_client.update_one(
-                collection_name="parsed_html_data",
+                collection_name=MONGO_PARSED_HTML_COLLECTION,
                 query={"_id": mongo_document_id},
                 update=update_payload,
                 upsert=True,

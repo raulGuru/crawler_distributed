@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.
 from parser.dispatch.job_dispatcher import dispatch_jobs
 from lib.utils.logging_utils import LoggingUtils
 from lib.storage.mongodb_client import MongoDBClient
+from config.base_settings import MONGO_PARSED_HTML_COLLECTION
 
 def sanitize_and_convert(obj, skip_binary=True):
     """Convert bytes to strings and handle nested structures.
@@ -106,7 +107,7 @@ class ParserTriggerPipeline:
                 'initial_insert_at': datetime.utcnow(),
             }
             self.logger.debug(f"Attempting to insert parser_doc into MongoDB (crawl_id: {parser_doc_for_insertion.get('crawl_id')}): {parser_doc_for_insertion}")
-            inserted_object_id = mongodb_client.insert_one('parsed_html_data', parser_doc_for_insertion)
+            inserted_object_id = mongodb_client.insert_one(MONGO_PARSED_HTML_COLLECTION, parser_doc_for_insertion)
 
             if inserted_object_id:
                 parser_unique_id = str(inserted_object_id)
