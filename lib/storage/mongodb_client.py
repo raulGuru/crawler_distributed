@@ -4,6 +4,7 @@ import os
 import pymongo
 from pymongo.errors import ConnectionFailure, OperationFailure
 from urllib.parse import urlparse
+from config.base_settings import MONGO_URI
 
 
 class MongoDBClient:
@@ -11,21 +12,10 @@ class MongoDBClient:
     Wrapper for MongoDB client with connection pooling and error handling
     """
 
-    # Default MongoDB configuration using environment variables
-    MONGO_HOST = os.environ.get('MONGO_HOST', 'localhost')
-    MONGO_PORT = int(os.environ.get('MONGO_PORT', 27017))
-    MONGO_DB = os.environ.get('MONGO_DB', 'crawler_db')
-    MONGO_USER = os.environ.get('MONGO_USER', '')
-    MONGO_PASSWORD = os.environ.get('MONGO_PASSWORD', '')
-    MONGO_AUTH_SOURCE = os.environ.get('MONGO_AUTH_SOURCE', 'admin')
-
     @classmethod
     def build_uri(cls):
-        """Build MongoDB URI from environment variables"""
-        if cls.MONGO_USER and cls.MONGO_PASSWORD:
-            return f"mongodb://{cls.MONGO_USER}:{cls.MONGO_PASSWORD}@{cls.MONGO_HOST}:{cls.MONGO_PORT}/{cls.MONGO_DB}?authSource={cls.MONGO_AUTH_SOURCE}"
-        else:
-            return f"mongodb://{cls.MONGO_HOST}:{cls.MONGO_PORT}/{cls.MONGO_DB}"
+        """Return MongoDB URI from config.base_settings"""
+        return MONGO_URI
 
     def __init__(self, uri=None, connect_timeout=5000, max_retries=3, logger=None):
         self.uri = uri or self.build_uri()

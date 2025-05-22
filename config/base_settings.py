@@ -64,8 +64,13 @@ MONGO_DB = os.environ.get('MONGO_DB', 'crawler_db')
 MONGO_USER = os.environ.get('MONGO_USER', '')
 MONGO_PASSWORD = os.environ.get('MONGO_PASSWORD', '')
 MONGO_AUTH_SOURCE = os.environ.get('MONGO_AUTH_SOURCE', 'admin')
-MONGO_URI = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}?authSource={MONGO_AUTH_SOURCE}" if MONGO_USER else f"mongodb://{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}"
-MONGO_CRAWL_JOB_COLLECTION = os.environ.get('MONGO_CRAWL_JOB_COLLECTION', 'crawler_crawl_jobs')
+MONGO_URI = (
+    f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}"
+    f"?authSource={MONGO_AUTH_SOURCE}&authMechanism=SCRAM-SHA-1"
+    if MONGO_USER else
+    f"mongodb://{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}"
+)
+MONGO_CRAWL_JOB_COLLECTION = os.environ.get('MONGO_CRAWL_JOB_COLLECTION', 'crawl_jobs')
 
 # Beanstalkd queue configuration
 QUEUE_HOST = os.environ.get('QUEUE_HOST', 'localhost')
