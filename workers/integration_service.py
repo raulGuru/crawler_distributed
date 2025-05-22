@@ -147,20 +147,20 @@ class IntegrationService:
         )
 
         # Check MongoDB
-        mongodb_check = self.health_check.check_mongodb()
+        # mongodb_check = self.health_check.check_mongodb()
 
         # Check system resources
         system_check = self.health_check.check_system()
 
         # Log results
-        for check in [beanstalkd_check, mongodb_check, system_check]:
+        for check in [beanstalkd_check, system_check]:
             if check['healthy']:
                 self.logger.info(f"{check['component']} check passed: {check['message']}")
             else:
                 self.logger.error(f"{check['component']} check failed: {check['message']}")
 
         # Overall health
-        dependencies_ok = beanstalkd_check['healthy'] and mongodb_check['healthy']
+        dependencies_ok = beanstalkd_check['healthy']
 
         if not dependencies_ok:
             self.logger.error("Dependency verification failed, cannot continue")

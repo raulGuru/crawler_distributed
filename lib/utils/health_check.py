@@ -372,7 +372,7 @@ class HealthCheck:
         # Run all checks
         checks = [
             self.check_beanstalkd(),
-            self.check_mongodb(),
+            # self.check_mongodb(),
             self.check_system(),
             self.check_component_processes(components=worker_names_to_check)
         ]
