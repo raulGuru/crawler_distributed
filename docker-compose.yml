@@ -1,0 +1,31 @@
+services:
+  crawler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/crawler-stack:latest
+    # Keep host network mode to access MongoDB & Beanstalkd on host
+    network_mode: "host"
+    # Use env vars from file; can be overridden per-deploy
+    env_file: .env
+    volumes:
+      - ./data:/app/data  # Mount data directory from local to container
+    environment:
+      - PYTHONPATH=/app
+      - LOG_DIR=/app/data/logs
+      - SCRAPY_SETTINGS_MODULE=crawler.spider_project.settings
+    restart: "no"
+    # Hard limits (tweak per hardware)
+    deploy:
+      resources:
+        limits:
+          cpus: "4.00"
+          memory: 6g
+    user: "1000:1000"
+
+    # Health-check for Beanstalkd availability
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket,sys; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 11300)); sys.exit(0)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
