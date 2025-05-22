@@ -35,7 +35,6 @@ FROM python:3.10-slim-bullseye
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     # Default file paths used by the app
-    LOG_DIR=/app/data/logs \
     PROJECT_ROOT=/app \
     PYTHONPATH=/app \
     SCRAPY_SETTINGS_MODULE=crawler.spider_project.settings \
