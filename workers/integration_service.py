@@ -32,7 +32,7 @@ class IntegrationService:
 
 
     def __init__(self, queue_host: str = QUEUE_HOST, queue_port: int = QUEUE_PORT, mongo_uri: str = MONGO_URI,
-                 health_check_interval: int = 60) -> None:
+                 health_check_interval: int = None) -> None:
         """
         Initialize the integration service
 
@@ -277,12 +277,13 @@ class IntegrationService:
 
         self.running = True
 
-        # Start health check thread
-        self.health_check_thread = threading.Thread(
-            target=self._run_health_check_thread,
-            daemon=True
-        )
-        self.health_check_thread.start()
+        if self.health_check_interval is not None:
+            # Start health check thread
+            self.health_check_thread = threading.Thread(
+                target=self._run_health_check_thread,
+                daemon=True
+            )
+            self.health_check_thread.start()
 
         self.logger.info("Integration service started successfully")
 
@@ -334,7 +335,7 @@ def main():
     parser = argparse.ArgumentParser(description='Integration service for distributed crawler')
     parser.add_argument('--queue-host', default=QUEUE_HOST, help='Beanstalkd host')
     parser.add_argument('--queue-port', type=int, default=QUEUE_PORT, help='Beanstalkd port')
-    parser.add_argument('--health-check-interval', type=int, default=60, help='Health check interval in seconds')
+    parser.add_argument('--health-check-interval', type=int, default=None, help='Health check interval in seconds')
 
     args = parser.parse_args()
 
