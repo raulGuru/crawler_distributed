@@ -3,7 +3,6 @@ import sys
 import signal
 import time
 import abc
-import logging
 import pymongo
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -18,7 +17,7 @@ from lib.queue.queue_manager import QueueManager
 from lib.storage.mongodb_client import MongoDBClient
 from lib.utils.logging_utils import LoggingUtils
 from lib.utils.extractor_base import BaseExtractor
-from config.base_settings import QUEUE_HOST, QUEUE_PORT, LOG_DIR
+from config.base_settings import QUEUE_HOST, QUEUE_PORT
 
 
 class RetryableError(Exception):
