@@ -5,16 +5,6 @@ content metrics, and page performance characteristics from saved HTML files as p
 of a distributed crawl-parser system.
 """
 
-#TODO:Some approximations are made for metrics that normally would require additional context (like HTTPS status or download time), but these could be refined in a real system where that information is available.
-
-# Since we can't measure actual download time after the fact,
-        # we'll estimate it based on the size (assuming reasonable connection)
-        # This is just a placeholder - in real world you'd want to use actual metrics
-# This is a simple approximation - in a real system you'd want to store
-        # the source domain with the file or extract it from the content
-# In a real system, this would be determined from the original URL
-        # or stored as metadata when crawling. Here we'll approximate.
-
 import os
 import sys
 import re
@@ -89,7 +79,7 @@ class PageElementsWorker(BaseParserWorker):
             )
 
             # Extract script and resource metrics
-            script_metrics = self._extract_script_metrics(soup, html_path)
+            script_metrics = self._extract_script_metrics(soup, domain)
 
             # Extract image metrics
             image_metrics = self._extract_image_metrics(soup)
@@ -103,7 +93,7 @@ class PageElementsWorker(BaseParserWorker):
             )
 
             # Determine HTTPS status
-            is_https = self._is_https(html_path, doc_id_str)
+            is_https = self._is_https(url)
 
             # Combine all metrics into one structure matching MongoDB schema
             page_elements_data = {
@@ -384,12 +374,12 @@ class PageElementsWorker(BaseParserWorker):
             "reading_time_minutes": reading_time_minutes
         }
 
-    def _extract_script_metrics(self, soup, html_path):
+    def _extract_script_metrics(self, soup, domain):
         """Extract metrics related to JavaScript and scripts.
 
         Args:
             soup (BeautifulSoup): Parsed HTML content.
-            html_path (str): Path to the HTML file.
+            domain (str): Domain of the page.
 
         Returns:
             dict: Script metrics.
@@ -406,9 +396,8 @@ class PageElementsWorker(BaseParserWorker):
         inline_script_size = sum(len(script.string or "") for script in inline_scripts)
 
         # Determine domain for external scripts
-        source_domain = self._extract_domain_from_path(html_path)
         same_domain_scripts = [script for script in external_scripts
-                               if source_domain and source_domain in script.get('src', '')]
+                               if domain and domain in script.get('src', '')]
 
         same_domain_script_count = len(same_domain_scripts)
         third_party_script_count = file_script_count - same_domain_script_count
@@ -517,57 +506,21 @@ class PageElementsWorker(BaseParserWorker):
         # Ensure score is within 0-100 range
         return max(0, min(100, score))
 
-    def _extract_domain_from_path(self, html_path):
-        """Extract domain from HTML file path if possible.
-
-        Args:
-            html_path (str): Path to the HTML file.
-
-        Returns:
-            str: Domain name or None if can't be determined.
-        """
-        # This is a simple approximation - in a real system you'd want to store
-        # the source domain with the file or extract it from the content
-        try:
-            # Try to parse domain from filename if it follows a pattern
-            filename = os.path.basename(html_path)
-
-            # Check if filename has a pattern like "domain_com.html" or "example.com.html"
-            domain_match = re.search(r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', filename)
-            if domain_match:
-                return domain_match.group(1)
-        except:
-            pass
-
-        return None
-
-    def _is_https(self, html_path, doc_id_str):
+    def _is_https(self, url):
         """Determine if the page was served over HTTPS.
 
         Args:
-            html_path (str): Path to the HTML file.
-            doc_id_str (str): Document ID.
+            url (str): URL of the page.
 
         Returns:
             bool: True if the page was served over HTTPS.
         """
-        # In a real system, this would be determined from the original URL
-        # or stored as metadata when crawling. Here we'll approximate.
         try:
-            # Try to find indicators in the filename
-            filename = os.path.basename(html_path)
-            if "https_" in filename or "https" in filename:
-                return True
+            parsed_url = urlparse(url)
+            return parsed_url.scheme == "https"
 
-            # For doc_id, check if it contains https
-            if "https" in doc_id_str:
-                return True
-
-            # Default to True as most modern sites use HTTPS
-            return True
         except:
-            # Default to True if we can't determine
-            return True
+            return False
 
 
 def main():

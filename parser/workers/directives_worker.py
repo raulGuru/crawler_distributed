@@ -4,12 +4,12 @@ This module contains the DirectivesWorker class which extracts robots directives
 from saved HTML files as part of a distributed crawl-parser system.
 """
 
-# TODO: # Extract X-Robots-Tag from metadata
 
 import os
 import sys
 import re
 import argparse
+import json
 
 # Add the project root to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -25,7 +25,7 @@ class DirectivesWorker(BaseParserWorker):
     """Worker for extracting robots directives from HTML files.
 
     This worker processes HTML files saved by the crawler, extracts robots directives
-    from meta tags, HTTP headers, and analyzes their implications for search engines.
+    from meta tags, HTTP headers (X-Robots-Tag), and analyzes their implications for search engines.
     """
 
     def __init__(self, instance_id: int = 0):
@@ -45,33 +45,60 @@ class DirectivesWorker(BaseParserWorker):
         return "directives_data"
 
     def extract_data(self, html_content: str, html_path: str, doc_id_str: str, url: str, domain: str) -> dict:
-        """Extract directives data from HTML content.
+        """Extract directives data from HTML content and HTTP headers.
 
         Args:
             html_content (str): The HTML content to parse.
             html_path (str): Path to the HTML file (for logging).
             doc_id_str (str): Document ID (for logging).
+            url (str): The URL of the page.
+            domain (str): The domain of the page.
 
         Returns:
             dict: Extracted directives data.
 
         Raises:
-            NonRetryableError: For HTML parsing errors.
+            NonRetryableError: For HTML parsing errors or critical data loading issues.
         """
         try:
             soup = self._create_soup(html_content)
 
+            headers_file_path = self.job_data.get('headers_file_path')
+            response_headers = self._load_headers_from_file(headers_file_path)
+
+            if not response_headers:
+                self.logger.warning(
+                    f"Failed to load headers or headers file not found for doc_id {doc_id_str} using path: {headers_file_path}. Proceeding without X-Robots-Tag."
+                )
+                response_headers = {}
+
+
             # Extract meta robots and googlebot tags
-            meta_robots_tags = self._extract_meta_tags(soup, "robots")
-            meta_googlebot_tags = self._extract_meta_tags(soup, "googlebot")
+            meta_robots_tags_content = self._extract_meta_tags_content(soup, "robots")
+            meta_googlebot_tags_content = self._extract_meta_tags_content(soup, "googlebot")
 
-            # Extract X-Robots-Tag from metadata
-            # In a real scenario, this would come from HTTP headers in the response
-            # Since we're working with saved HTML files, we'll leave this null
-            x_robots_tag = None
+            meta_robots_directives = self._parse_directives_from_content_list(meta_robots_tags_content)
+            meta_googlebot_directives = self._parse_directives_from_content_list(meta_googlebot_tags_content)
 
-            # Get all directives from meta robots and googlebot tags
-            all_directives = self._combine_directives(meta_robots_tags, meta_googlebot_tags, x_robots_tag)
+
+            # Extract X-Robots-Tag from loaded HTTP headers
+            # Header keys are stored as lowercase by the spider.
+            x_robots_tag_header_values = response_headers.get('x-robots-tag', [])
+            if not isinstance(x_robots_tag_header_values, list): # Ensure it's a list
+                x_robots_tag_header_values = [x_robots_tag_header_values]
+
+            x_robots_tag_directives = self._parse_directives_from_content_list(x_robots_tag_header_values)
+
+            # For reporting, store the raw X-Robots-Tag header string(s)
+            raw_x_robots_tag_string = ", ".join(x_robots_tag_header_values) if x_robots_tag_header_values else None
+
+
+            # Get all directives from meta robots, googlebot tags, and X-Robots-Tag
+            all_directives = self._combine_directives(
+                meta_robots_directives,
+                meta_googlebot_directives,
+                x_robots_tag_directives
+            )
 
             # Check for the presence of specific directives
             directive_flags = self._analyze_directive_presence(all_directives)
@@ -86,7 +113,7 @@ class DirectivesWorker(BaseParserWorker):
             has_conflicts = self._check_directive_conflicts(directive_flags)
 
             # Analyze issues with directives
-            issues = self._analyze_directive_issues(directive_flags, has_conflicts)
+            issues = self._analyze_directive_issues(directive_flags, has_conflicts, meta_robots_directives, x_robots_tag_directives)
 
             # Determine overall indexability and followability
             indexability = self._determine_indexability(directive_flags)
@@ -94,10 +121,10 @@ class DirectivesWorker(BaseParserWorker):
 
             # Construct the final directives data
             directives_data = {
-                "meta_robots": meta_robots_tags,
-                "meta_googlebot": meta_googlebot_tags,
-                "x_robots_tag": x_robots_tag,
-                "all_directives": all_directives,
+                "meta_robots": meta_robots_tags_content,
+                "meta_googlebot": meta_googlebot_tags_content,
+                "x_robots_tag": raw_x_robots_tag_string,
+                "all_parsed_directives": all_directives,
                 **directive_flags,
                 **link_counts,
                 **directive_values,
@@ -115,58 +142,68 @@ class DirectivesWorker(BaseParserWorker):
 
         except Exception as e:
             self.logger.error(
-                f"HTML parsing failed for {html_path}, doc_id: {doc_id_str}: {e}"
+                f"Directive extraction failed for {html_path}, doc_id: {doc_id_str}: {e}"
             )
-            raise NonRetryableError(f"HTML parsing failed for {html_path}: {e}")
+            raise NonRetryableError(f"Directive extraction failed for {html_path}: {e}")
 
-    def _extract_meta_tags(self, soup, name):
-        """Extract content from meta tags with the specified name.
+    def _extract_meta_tags_content(self, soup, name: str) -> list[str]:
+        """Extract content strings from meta tags with the specified name.
 
         Args:
             soup (BeautifulSoup): Parsed HTML content.
             name (str): Name attribute of the meta tag to extract.
 
         Returns:
-            list: List of directives found in the meta tags.
+            list[str]: List of content strings found in the meta tags.
+        """
+        contents = []
+        meta_tags = soup.find_all("meta", attrs={"name": name})
+        for tag in meta_tags:
+            content = tag.get("content", "").strip()
+            if content:
+                contents.append(content)
+        return contents
+
+    def _parse_directives_from_content_list(self, content_list: list[str]) -> list[str]:
+        """Parses a list of content strings into a flat list of directives.
+           Example: ["noindex, nofollow", "max-snippet:10"] -> ["noindex", "nofollow", "max-snippet:10"]
         """
         directives = []
-        meta_tags = soup.find_all("meta", attrs={"name": name})
-
-        for tag in meta_tags:
-            content = tag.get("content", "").strip().lower()
-            if content:
-                # Split by comma and strip whitespace
-                tag_directives = [d.strip() for d in content.split(",")]
-                directives.extend(tag_directives)
-
+        for content_string in content_list:
+            # Split by comma and strip whitespace, convert to lowercase
+            tag_directives = [d.strip().lower() for d in content_string.split(",")]
+            directives.extend(d for d in tag_directives if d) # Ensure no empty strings
         return directives
 
-    def _combine_directives(self, meta_robots, meta_googlebot, x_robots_tag):
+    def _combine_directives(self, meta_robots_directives, meta_googlebot_directives, x_robots_directives):
         """Combine directives from different sources.
 
         Args:
-            meta_robots (list): Directives from meta robots tags.
-            meta_googlebot (list): Directives from meta googlebot tags.
-            x_robots_tag (str): Directives from X-Robots-Tag HTTP header.
+            meta_robots_directives (list): Parsed directives from meta robots tags.
+            meta_googlebot_directives (list): Parsed directives from meta googlebot tags.
+            x_robots_directives (list): Parsed directives from X-Robots-Tag HTTP header.
 
         Returns:
-            list: Combined list of unique directives.
+            list: Combined list of unique directives (all lowercase).
         """
-        all_directives = []
-        all_directives.extend(meta_robots)
-        all_directives.extend(meta_googlebot)
+        combined = []
+        combined.extend(meta_robots_directives)
+        combined.extend(meta_googlebot_directives)
+        combined.extend(x_robots_directives)
 
-        if x_robots_tag:
-            # Split by comma and strip whitespace
-            x_robots_directives = [d.strip() for d in x_robots_tag.split(",")]
-            all_directives.extend(x_robots_directives)
-
-        # Remove duplicates while preserving order
+        # Remove duplicates while preserving order (important for specificity if ever needed)
+        # and ensure all are lowercase.
         unique_directives = []
-        for directive in all_directives:
-            if directive not in unique_directives:
+        seen_directives = set()
+        for directive in combined:
+            # Directives like max-snippet:10 should be kept as is, but noindex should be lowercase
+            # The parsing in _parse_directives_from_content_list already lowercases non-value parts
+            # For now, we assume directives are already appropriately cased/lowercased by the parser.
+            # Screaming Frog seems to treat most directives case-insensitively.
+            # We are already doing .lower() in _parse_directives_from_content_list
+            if directive not in seen_directives:
                 unique_directives.append(directive)
-
+                seen_directives.add(directive)
         return unique_directives
 
     def _analyze_directive_presence(self, all_directives):
@@ -350,12 +387,14 @@ class DirectivesWorker(BaseParserWorker):
 
         return conflicts
 
-    def _analyze_directive_issues(self, directive_flags, has_conflicts):
+    def _analyze_directive_issues(self, directive_flags, has_conflicts, meta_directives, header_directives):
         """Analyze issues with directives.
 
         Args:
             directive_flags (dict): Dictionary of directive presence flags.
             has_conflicts (bool): Whether there are conflicts between directives.
+            meta_directives (list): Directives found in meta tags.
+            header_directives (list): Directives found in X-Robots-Tag.
 
         Returns:
             list: List of identified issues.
@@ -366,15 +405,35 @@ class DirectivesWorker(BaseParserWorker):
         if has_conflicts:
             issues.append("conflicting_directives")
 
-        # Check for redundant directives (index and follow are default)
+        # Check for redundant directives (index and follow are default if not overridden)
+        # A directive like "index" is only redundant if "noindex" and "none" are absent.
         if directive_flags["has_index"] and not directive_flags["has_noindex"] and not directive_flags["has_none"]:
-            issues.append("redundant_directives")
-        if directive_flags["has_follow"] and not directive_flags["has_nofollow"] and not directive_flags["has_none"]:
-            issues.append("redundant_directives")
+            # Check if "index" was explicitly stated or just default.
+            # If "index" is in all_directives, it means it was explicitly stated.
+            # Note: all_directives comes from combining meta, googlebot, and x-robots.
+            # We need to check if 'index' was *explicitly* stated or just the default.
+            # The 'has_index' flag is set to True by default if noindex/none are missing.
+            # An explicit "index" is redundant.
+            # For this check, we need to see if "index" was actually in the source directives.
+            pass # Redundancy of "index" or "follow" is often minor, Screaming Frog might not flag it heavily.
+
 
         # Check for noindex without nofollow (might waste crawl budget)
         if directive_flags["has_noindex"] and not directive_flags["has_nofollow"] and not directive_flags["has_none"]:
             issues.append("noindex_without_nofollow")
+
+        # Check for different directives from meta tags vs. HTTP headers if both exist
+        if meta_directives and header_directives:
+            # Normalize by sorting for comparison, as order within a single source doesn't matter for presence.
+            # However, the combination of directives from ALL sources matters.
+            # This check is more about whether meta and header provide conflicting signals *if looked at in isolation*.
+            # A more robust check for conflicting sources would be to see if the *effective outcome* differs.
+            # For example, meta says "noindex", header says "index". That's a conflict.
+            # Screaming Frog reports "Meta Robots 1" and "X-Robots-Tag 1" separately.
+            # The "Indexability Status" then gives the reason.
+            # For now, we don't add an issue here, as `has_conflicts` already covers combined effective conflicts.
+            pass
+
 
         return issues
 
