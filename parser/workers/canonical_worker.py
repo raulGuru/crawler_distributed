@@ -4,15 +4,9 @@ This module contains the CanonicalWorker class which extracts canonical URL info
 from saved HTML files as part of a distributed crawl-parser system.
 """
 
-# TODO:
-# Modify Scrapy crawler to save HTTP headers alongside the HTML file (perhaps as a JSON metadata file)
-# Have Scrapy crawler extract the HTTP canonical links during crawling and include this in a metadata file or database record
-
 import os
 import sys
-from datetime import datetime
 import argparse
-import time
 from urllib.parse import urljoin
 import re
 
@@ -69,9 +63,17 @@ class CanonicalWorker(BaseParserWorker):
         try:
             soup = self._create_soup(html_content)
 
-            # Extract the current page URL from job metadata if available
-            # Otherwise, we'll have to infer from file or set to None
             current_url = url or self._get_current_url_from_file(html_path)
+
+            # Load headers from file
+            headers_file_path = self.job_data.get('headers_file_path')
+            response_headers = self._load_headers_from_file(headers_file_path)
+            if not response_headers:
+                self.logger.warning(f"headers_file_path not found for doc_id {doc_id_str}")
+                response_headers = {}
+            else:
+                self.logger.warning(f"headers_file_path not found for doc_id {doc_id_str}")
+                response_headers = {}
 
             # Extract canonical URL from HTML link element
             canonical_tags = soup.find_all("link", rel="canonical")
@@ -88,15 +90,21 @@ class CanonicalWorker(BaseParserWorker):
 
             # Extract HTTP headers canonical from response headers
             http_canonical = None
-            if hasattr(self, 'job_data') and self.job_data.get('headers'):
-                link_header = self.job_data['headers'].get('link', '')
-                if link_header:
-                    # Parse Link header for canonical
-                    for link in link_header.split(','):
-                        if 'rel="canonical"' in link or "rel='canonical'" in link:
-                            match = re.search(r'<([^>]+)>', link)
+            link_header_values = response_headers.get('link', [])
+
+            if not isinstance(link_header_values, list):
+                link_header_values = [link_header_values]
+
+            for link_header_line in link_header_values:
+                if link_header_line:
+                    for link_part in link_header_line.split(','):
+                        if 'rel="canonical"' in link_part.lower() or "rel='canonical'" in link_part.lower():
+                            match = re.search(r'<([^>]+)>', link_part)
                             if match:
                                 http_canonical = match.group(1)
+                                break
+                if http_canonical:
+                    break
 
             # Check if we have any form of canonical
             has_canonical = bool(canonical_url) or bool(http_canonical)
@@ -159,9 +167,10 @@ class CanonicalWorker(BaseParserWorker):
             robots_content = meta_robots.get("content", "") if meta_robots else ""
 
             # Get X-Robots-Tag from headers
+            x_robots_tag_values = response_headers.get('x-robots-tag', [])
             x_robots_tag = ""
-            if hasattr(self, 'job_data') and self.job_data.get('headers'):
-                x_robots_tag = self.job_data['headers'].get('x-robots-tag', '')
+            if x_robots_tag_values:
+                x_robots_tag = ", ".join(x_robots_tag_values)
 
             is_noindex = ('noindex' in robots_content.lower() or 'noindex' in x_robots_tag.lower())
 
