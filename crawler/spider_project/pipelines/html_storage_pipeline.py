@@ -7,6 +7,7 @@ import os
 import logging
 from typing import Dict, Any
 from urllib.parse import urlparse
+import json
 
 from scrapy.exceptions import DropItem, CloseSpider
 from crawler.spider_project.utils.url_utils import normalize_domain
@@ -92,21 +93,39 @@ class HTMLStoragePipeline:
             # Full path for the file
             file_path = os.path.join(domain_folder, filename)
 
-            # Save HTML content
+            # Construct headers file path
+            base_filename, _ = os.path.splitext(filename)
+            headers_filename = base_filename + '.headers.json'
+            headers_file_path = os.path.join(domain_folder, headers_filename)
+
             try:
+                # Save HTML content
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write(item['html'])
                     # Ensure content is written to disk
                     f.flush()
                     os.fsync(f.fileno())
-
                 self.logger.info(f"Successfully saved HTML for {item['url']} to {file_path}")
+
+                # Save headers content if available
+                if 'response_headers' in item:
+                    try:
+                        with open(headers_file_path, 'w', encoding='utf-8') as hf:
+                            json.dump(item['response_headers'], hf, ensure_ascii=False, indent=4)
+                        self.logger.info(f"Successfully saved headers for {item['url']} to {headers_file_path}")
+                        item['headers_file_path'] = headers_file_path
+                    except IOError as e_headers:
+                        self.logger.error(f"Failed to save headers file for {item['url']}: {str(e_headers)}")
+                        raise DropItem(f"Failed to save headers file: {str(e_headers)}")
+                    except TypeError as e_json:
+                        self.logger.error(f"Failed to serialize headers to JSON for {item['url']}: {str(e_json)}")
 
                 # Add storage info to item
                 item['storage'] = {
                     'file_path': file_path,
                     'domain_folder': domain_folder,
-                    'filename': filename
+                    'filename': filename,
+                    'headers_file_path': headers_file_path
                 }
                 item['html_file_path'] = file_path
                 item['crawled_at'] = datetime.utcnow().isoformat()

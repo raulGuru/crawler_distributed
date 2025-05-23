@@ -25,7 +25,7 @@ def sanitize_and_convert(obj, skip_binary=True):
         result = {}
         for k, v in obj.items():
             # Skip binary fields if requested
-            if skip_binary and k in ['html', 'body', 'raw_content']:
+            if skip_binary and k in ['html', 'body', 'raw_content', 'response_headers']:
                 continue
 
             # Convert key if it's bytes

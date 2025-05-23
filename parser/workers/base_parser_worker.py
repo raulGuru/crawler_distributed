@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import signal
@@ -173,6 +174,15 @@ class BaseParserWorker(abc.ABC):
         except Exception as e:
             self.logger.error(f"[{self.worker_name}] MongoDB update failed for doc_id {doc_id_str}: {e}")
             raise RetryableError(f"[{self.worker_name}] MongoDB update failed for doc_id {doc_id_str}: {e}")
+
+    def _load_headers_from_file(self, headers_file_path: str) -> dict | None:
+        """Load headers from file with proper error handling."""
+        try:
+            with open(headers_file_path, 'r', encoding='utf-8') as hf:
+                return json.load(hf)
+        except Exception as e:
+            self.logger.error(f"[{self.worker_name}] Failed to load headers from {headers_file_path}: {e}")
+            return None
 
     def process_task(self, job_data: dict) -> None:
         """Process a task with common workflow."""
