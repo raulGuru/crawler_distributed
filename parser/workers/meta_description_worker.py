@@ -6,9 +6,7 @@ content from saved HTML files as part of a distributed crawl-parser system.
 
 import os
 import sys
-from datetime import datetime
 import argparse
-import time
 
 # Add the project root to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))

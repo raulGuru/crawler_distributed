@@ -7,12 +7,10 @@ distributed crawl-parser system.
 
 import os
 import sys
-from datetime import datetime
 import argparse
-import time
 import re
 from difflib import SequenceMatcher
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Set
 
 # Add the project root to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
