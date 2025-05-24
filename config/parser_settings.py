@@ -92,12 +92,12 @@ ALL_PARSER_TASK_TYPES = {
         "instances": int(os.getenv("PAGE_ELEMENTS_INSTANCES", DEFAULT_INSTANCES)),
         "worker_script_file": "page_elements_worker.py"
     },
-    # "pagespeed": {
-    #     "priority": DEFAULT_PRIORITY,
-    #     "ttr": DEFAULT_TTR,
-    #     "instances": int(os.getenv("PAGESPEED_INSTANCES", DEFAULT_INSTANCES)),
-    #     "worker_script_file": "pagespeed_worker.py"
-    # },
+    "page_speed": {
+        "priority": DEFAULT_PRIORITY,
+        "ttr": DEFAULT_TTR,
+        "instances": int(os.getenv("PAGESPEED_INSTANCES", DEFAULT_INSTANCES)),
+        "worker_script_file": "pagespeed_worker.py"
+    },
     # "response_codes": {
     #     "priority": DEFAULT_PRIORITY,
     #     "ttr": DEFAULT_TTR,
