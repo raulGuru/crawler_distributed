@@ -2,7 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Spider for crawling entire domains with support for sitemaps and BFS crawling.
+Enhanced spider for crawling entire domains with intelligent sitemap filtering.
+
+This spider implements page-aware sitemap processing that prioritizes actual
+page content over posts, categories, and other non-page content types.
 """
 
 import logging
@@ -15,12 +18,11 @@ from scrapy.linkextractors import LinkExtractor
 
 from .base_spider import BaseSpider
 from lib.utils.sitemap_utils import (
-    get_urls_from_sitemap,
     locate_sitemap_url,
     is_sitemap_outdated,
     fetch_sitemap,
     is_sitemap_index,
-    extract_urls_from_sitemap_index,
+    extract_urls_from_sitemap_index_with_filtering,
     extract_urls_from_sitemap,
     prioritize_urls
 )
@@ -30,11 +32,16 @@ logger = logging.getLogger(__name__)
 
 class DomainSpider(BaseSpider):
     """
-    Spider for crawling entire domains with configurable strategies.
+    Enhanced spider for crawling entire domains with intelligent sitemap processing.
 
-    This spider defaults to breadth-first search (BFS) crawling for more uniform coverage.
-    1. If use_sitemap=True, it will use sitemaps to discover URLs.
-    2. Otherwise, it performs a BFS crawl starting from the homepage, extracting links level by level.
+    This spider implements a two-strategy approach with enhanced sitemap filtering:
+    1. Sitemap Strategy: Prioritizes page sitemaps over post/category sitemaps
+    2. BFS Strategy: Breadth-first search as fallback when sitemaps fail to provide URLs
+
+    Key enhancements:
+    - Filters sitemap indexes to focus on page content
+    - Falls back to BFS when filtered sitemaps contain zero URLs
+    - Maintains all existing functionality for non-filtered sitemap processing
     """
 
     name = 'domain_spider'
@@ -96,7 +103,9 @@ class DomainSpider(BaseSpider):
             self.use_sitemap = use_sitemap.lower() in ('true', 'yes', '1')
         else:
             self.use_sitemap = bool(use_sitemap)
+
         self.sitemap_processed = False  # Flag to track if sitemap has been processed
+        self.sitemap_found_pages = False  # Flag to track if page sitemaps were found
 
         # Queue for managing URLs with bounded size
         self.url_queue = deque()
@@ -155,6 +164,7 @@ class DomainSpider(BaseSpider):
             if max_pages and pages_crawled >= max_pages:
                 logger.info(f"[SOFT CHECK] Not enqueuing {url}: effective max_pages limit ({max_pages}) reached (pages_crawled={pages_crawled})")
                 return
+
         # Check if URL has skipped extension before enqueuing
         if has_skipped_extension(url):
             logger.warning(f"URL has skipped extension, not enqueuing: {url}")
@@ -287,13 +297,12 @@ class DomainSpider(BaseSpider):
         except Exception as e:
             logger.error(f"Error in _handle_homepage for {response.url}: {str(e)}")
             # If homepage processing fails, try to continue with BFS crawl
-
             # Always try to continue with BFS crawl as fallback
             yield from self._start_bfs_crawl(response)
 
     def _process_sitemap_urls(self, sitemap_url: str) -> Iterator[Request]:
         """
-        Process a sitemap URL, handling both regular sitemaps and sitemap indexes.
+        Process a sitemap URL with intelligent page filtering and fallback logic.
 
         Args:
             sitemap_url: URL of the sitemap to process
@@ -312,79 +321,87 @@ class DomainSpider(BaseSpider):
             logger.warning(f"Failed to fetch sitemap: {sitemap_url}")
             return
 
+        all_urls = []
+        found_page_sitemaps = False
+
         # Check if it's a sitemap index
         if is_sitemap_index(sitemap_content):
             logger.info(f"Processing sitemap index: {sitemap_url}")
-            # Extract child sitemap URLs
-            child_sitemap_urls = extract_urls_from_sitemap_index(sitemap_content, sitemap_url)
 
-            # Process each child sitemap
-            all_urls = []
-            for child_url in child_sitemap_urls:
+            # Extract and filter child sitemap URLs for page content
+            filtered_sitemap_urls, found_page_sitemaps = extract_urls_from_sitemap_index_with_filtering(
+                sitemap_content, sitemap_url
+            )
+
+            if not filtered_sitemap_urls:
+                logger.warning(f"No sitemaps found in sitemap index: {sitemap_url}")
+                return
+
+            logger.info(f"Found {len(filtered_sitemap_urls)} filtered sitemaps "
+                       f"(page sitemaps detected: {found_page_sitemaps})")
+
+            # Process each filtered child sitemap
+            for child_url in filtered_sitemap_urls:
                 child_content = fetch_sitemap(child_url)
                 if child_content:
                     urls = extract_urls_from_sitemap(child_content, child_url)
                     all_urls.extend(urls)
+                    logger.debug(f"Extracted {len(urls)} URLs from {child_url}")
 
                 # Stop if we have enough URLs
                 if len(all_urls) >= self._effective_max_pages:
                     break
 
-            # Prioritize and limit URLs
-            if all_urls:
-                prioritized_urls = prioritize_urls(all_urls, self._effective_max_pages)
-
-                # Enqueue and yield requests for the prioritized URLs
-                for url in prioritized_urls:
-                    if url not in self.crawled_urls and self.unique_pages_crawled < self._effective_max_pages:
-                        self._enqueue_url(url, callback=self._parse_page)
-                        yield self.make_request(
-                            url=url,
-                            callback=self._parse_page,
-                            errback=self.handle_error
-                        )
-
-                # Mark sitemap as processed
-                self.sitemap_processed = True
-                logger.info(f"Processed sitemap index with {len(prioritized_urls)} prioritized URLs")
         else:
             # Regular sitemap
             logger.info(f"Processing regular sitemap: {sitemap_url}")
-            urls = extract_urls_from_sitemap(sitemap_content, sitemap_url)
+            all_urls = extract_urls_from_sitemap(sitemap_content, sitemap_url)
 
-            # Prioritize and limit URLs
-            if urls:
-                prioritized_urls = prioritize_urls(urls, self._effective_max_pages)
+        # CRITICAL: Check if we got any URLs after processing
+        if not all_urls:
+            logger.warning(f"No URLs extracted from sitemap(s) for {self.domain}. "
+                          f"Filtered sitemaps contained zero URLs - falling back to BFS crawling.")
+            self.sitemap_processed = False  # Mark as failed so we can fallback
+            return  # Return empty iterator, caller should handle BFS fallback
 
-                # Enqueue and yield requests for the prioritized URLs
-                for url in prioritized_urls:
-                    if url not in self.crawled_urls and self.unique_pages_crawled < self._effective_max_pages:
-                        self._enqueue_url(url, callback=self._parse_page)
-                        yield self.make_request(
-                            url=url,
-                            callback=self._parse_page,
-                            errback=self.handle_error
-                        )
+        # If we got URLs, prioritize and process them
+        prioritized_urls = prioritize_urls(all_urls, self._effective_max_pages)
 
-                # Mark sitemap as processed
-                self.sitemap_processed = True
-                logger.info(f"Processed regular sitemap with {len(prioritized_urls)} prioritized URLs")
+        if prioritized_urls:
+            logger.info(f"Successfully processed sitemap(s) with {len(prioritized_urls)} prioritized URLs")
+
+            # Mark sitemap as successfully processed
+            self.sitemap_processed = True
+            self.sitemap_found_pages = found_page_sitemaps
+
+            # Enqueue and yield requests for the prioritized URLs
+            for url in prioritized_urls:
+                if url not in self.crawled_urls and self.unique_pages_crawled < self._effective_max_pages:
+                    self._enqueue_url(url, callback=self._parse_page)
+                    yield self.make_request(
+                        url=url,
+                        callback=self._parse_page,
+                        errback=self.handle_error
+                    )
+        else:
+            logger.warning(f"No URLs remained after prioritization for {self.domain} - falling back to BFS")
+            self.sitemap_processed = False
 
     def _parse_sitemap(self, response: Response) -> Iterator[Request]:
         """
-        Parse XML sitemap and generate requests for each URL.
+        Parse XML sitemap and generate requests for each URL with enhanced filtering.
         """
         try:
             # Skip HTML storage for sitemap.xml
             response.meta['skip_html_storage'] = True
 
-            # Use the sitemap processing function
+            # Use the enhanced sitemap processing function
             yield from self._process_sitemap_urls(response.url)
 
-            # If sitemap didn't provide any URLs or wasn't processed successfully,
-            # fall back to BFS crawling
+            # ENHANCED FALLBACK: If sitemap didn't provide any URLs, fall back to BFS
             if not self.sitemap_processed and self.unique_pages_crawled < self._effective_max_pages:
-                logger.info(f"Sitemap for {self.domain} didn't provide URLs, falling back to BFS crawl")
+                logger.info(f"Enhanced sitemap processing failed for {self.domain} "
+                           f"(no URLs found after filtering), falling back to BFS crawl")
                 yield from self._start_bfs_crawl(response)
 
         except Exception as e:
@@ -394,7 +411,7 @@ class DomainSpider(BaseSpider):
 
     def _parse_robots(self, response: Response) -> Iterator[Request]:
         """
-        Parse robots.txt to find sitemap locations.
+        Parse robots.txt to find sitemap locations with enhanced processing.
         """
         try:
             # Skip HTML storage for robots.txt
@@ -411,7 +428,7 @@ class DomainSpider(BaseSpider):
                     sitemap_url = line.split(':', 1)[1].strip()
                     sitemap_urls.append(sitemap_url)
 
-            # Process found sitemap URLs
+            # Process found sitemap URLs with enhanced filtering
             if sitemap_urls:
                 for sitemap_url in sitemap_urls:
                     yield from self._process_sitemap_urls(sitemap_url)
@@ -424,9 +441,9 @@ class DomainSpider(BaseSpider):
                 if sitemap_url:
                     yield from self._process_sitemap_urls(sitemap_url)
 
-            # If no sitemap URLs were processed, fall back to BFS crawl
+            # ENHANCED FALLBACK: If no sitemap URLs were processed successfully, fall back to BFS crawl
             if not self.sitemap_processed and self.unique_pages_crawled < self._effective_max_pages:
-                logger.info(f"No sitemaps found in robots.txt for {self.domain}, falling back to BFS crawl")
+                logger.info(f"No sitemaps successfully processed for {self.domain}, falling back to BFS crawl")
                 start_url = response.meta.get('start_url')
                 if start_url:
                     yield self.make_request(url=start_url, callback=self._start_bfs_crawl)
@@ -448,8 +465,16 @@ class DomainSpider(BaseSpider):
             yield self.make_request(url=start_url, callback=self._start_bfs_crawl)
 
     def _start_bfs_crawl(self, response: Response) -> Iterator[Request]:
-        """Start BFS crawling from a response."""
+        """Start BFS crawling from a response with enhanced logging."""
         logger.info(f"Starting BFS crawl from {response.url}")
+
+        # If we tried sitemap but it failed, log the reason
+        if self.use_sitemap and not self.sitemap_processed:
+            if self.sitemap_found_pages:
+                logger.info(f"BFS fallback reason: Page sitemaps found but contained no URLs")
+            else:
+                logger.info(f"BFS fallback reason: No suitable page sitemaps found or sitemap processing failed")
+
         # Extract all links
         links = self.link_extractor.extract_links(response)
         # Log the number of links found for debugging
@@ -481,7 +506,9 @@ class DomainSpider(BaseSpider):
                 logger.debug(f"Queuing URL for crawling: {url_data['url']}")
 
     def _parse_page(self, response: Response) -> Iterator[Dict[str, Any]]:
-        """Parse a crawled page."""
+        """Parse a crawled page with enhanced tracking."""
+        from scrapy.http import HtmlResponse
+
         # Remove from currently crawling set
         url = response.url
         self._remove_from_crawling(url)
@@ -490,15 +517,22 @@ class DomainSpider(BaseSpider):
         if url not in self.crawled_urls:
             self.crawled_urls.add(url)
             self.unique_pages_crawled += 1
-            logger.info(f"Crawled page {self.unique_pages_crawled}/{self._effective_max_pages}: {url}")
+
+            # Enhanced logging with strategy information
+            strategy_info = "sitemap" if self.sitemap_processed else "BFS"
+            logger.info(f"Crawled page {self.unique_pages_crawled}/{self._effective_max_pages}: {url} (via {strategy_info})")
 
             # Only extract new links if we haven't reached the max pages limit
             if self.unique_pages_crawled < self._effective_max_pages:
-                # Extract and queue new links
-                links = self.link_extractor.extract_links(response)
-                for link in links:
-                    if link.url not in self.crawled_urls and link.url not in self.currently_crawling:
-                        self._enqueue_url(link.url)
+                try:
+                    # Extract and queue new links (with error handling)
+                    links = self.link_extractor.extract_links(response)
+                    for link in links:
+                        if link.url not in self.crawled_urls and link.url not in self.currently_crawling:
+                            self._enqueue_url(link.url)
+                except Exception as e:
+                    logger.warning(f"Error extracting links from {url}: {str(e)}")
+                    # Continue processing even if link extraction fails
 
                 # Process more URLs from the queue up to concurrent limit
                 while self.url_queue and len(self.currently_crawling) < self.concurrent_requests_per_domain:
@@ -513,39 +547,27 @@ class DomainSpider(BaseSpider):
                     else:
                         break
 
-        # Yield the parsed page data
-        output = {
-            'url': response.url,
-            'status': response.status,
-            'html': response.text,
-            'response_headers': {k.decode('utf-8'): [v.decode('utf-8') for v in response.headers.getlist(k)] for k in response.headers.keys()},
-            'job_id': self.job_id,
-            'crawl_id': self.crawl_id,
-            'domain': self.domain,
-            **self.custom_params
-        }
-
-        yield output
-
-    def _is_sitemap_too_old(self, lastmod: str) -> bool:
-        """
-        Check if sitemap's lastmod date is older than specified max age days.
-        """
-        from datetime import datetime, timedelta
+        # Yield the parsed page data (only for valid HTML responses)
         try:
-            for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%d"):
-                try:
-                    lastmod_date = datetime.strptime(lastmod, fmt)
-                    return (datetime.now() - lastmod_date) > timedelta(days=self.sitemap_max_age_days)
-                except ValueError:
-                    continue
-            return False  # If we can't parse the date, assume it's not too old
+            output = {
+                'url': response.url,
+                'status': response.status,
+                'html': response.text,
+                'response_headers': {k.decode('utf-8'): [v.decode('utf-8') for v in response.headers.getlist(k)] for k in response.headers.keys()},
+                'job_id': self.job_id,
+                'crawl_id': self.crawl_id,
+                'domain': self.domain,
+                'crawl_strategy': 'sitemap' if self.sitemap_processed else 'bfs',
+                'sitemap_found_pages': self.sitemap_found_pages,
+                **self.custom_params
+            }
+
+            yield output
         except Exception as e:
-            logger.warning(f"Error checking if sitemap is too old: {e}")
-            return False
+            logger.error(f"Error creating output for {url}: {str(e)}")
 
     def handle_error(self, failure):
-        """Handle failed requests."""
+        """Handle failed requests with enhanced error tracking."""
         # Safely remove from currently crawling set
         if hasattr(failure, 'request') and hasattr(failure.request, 'url'):
             self._remove_from_crawling(failure.request.url)
@@ -571,3 +593,17 @@ class DomainSpider(BaseSpider):
                 dont_filter=True,
                 meta=url_data.get('meta', {})
             )
+
+    def closed(self, reason: str):
+        """Called when spider is closed with enhanced statistics."""
+        # Log enhanced statistics
+        strategy_used = "sitemap" if self.sitemap_processed else "BFS"
+        logger.info(f"Spider closed ({reason}). Strategy used: {strategy_used}")
+
+        if self.sitemap_processed:
+            logger.info(f"Sitemap processing: found_page_sitemaps={self.sitemap_found_pages}")
+
+        logger.info(f"URLs crawled: {len(self.crawled_urls)}, Pages processed: {self.unique_pages_crawled}")
+
+        # Call parent's closed method
+        super().closed(reason)
