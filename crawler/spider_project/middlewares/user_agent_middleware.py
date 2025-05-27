@@ -130,29 +130,27 @@ class UserAgentMiddleware:
         Returns:
             None: Continue processing the request
         """
-        # Skip if the request already has a User-Agent header
-        if 'User-Agent' in request.headers:
-            return None
-
-        # Skip if middleware is disabled for this request
-        if request.meta.get('skip_user_agent', False):
-            return None
-
-        # Get user agent based on policy
+        # Always set a realistic User-Agent, even if one is present
         user_agent = self._get_user_agent(request)
-
         if user_agent:
-            # Apply the user agent
             request.headers['User-Agent'] = user_agent
-
-            # Update stats
             self.stats['requests_with_ua'] += 1
             self.stats['user_agents_used'].add(user_agent)
             spider.crawler.stats.inc_value('user_agent/requests_with_ua')
-
-            # For debugging
             logger.debug(f"Applied User-Agent: {user_agent} for {request.url}")
 
+        # Add more browser-like headers
+        request.headers.setdefault('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
+        request.headers.setdefault('Accept-Language', 'en-US,en;q=0.9')
+        request.headers.setdefault('Accept-Encoding', 'gzip, deflate, br')
+        request.headers.setdefault('Connection', 'keep-alive')
+        request.headers.setdefault('Upgrade-Insecure-Requests', '1')
+        request.headers.setdefault('Sec-Fetch-Dest', 'document')
+        request.headers.setdefault('Sec-Fetch-Mode', 'navigate')
+        request.headers.setdefault('Sec-Fetch-Site', 'none')
+        request.headers.setdefault('Sec-Fetch-User', '?1')
+        # Enable cookies for all requests
+        request.cookies = request.cookies or {}
         return None
 
     def _get_user_agent(self, request):
