@@ -7,15 +7,11 @@ Spider for crawling entire domains with support for sitemaps and BFS crawling.
 
 import logging
 from typing import Iterator, Optional, Dict, Any, Generator, List, Set
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 from collections import deque
-import re
 
 from scrapy.http import Request, Response
-from scrapy.spiders import CrawlSpider, Rule, Spider
 from scrapy.linkextractors import LinkExtractor
-from scrapy.exceptions import CloseSpider
-from scrapy.utils.response import get_base_url
 
 from .base_spider import BaseSpider
 from lib.utils.sitemap_utils import (
