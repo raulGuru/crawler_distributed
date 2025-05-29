@@ -81,8 +81,9 @@ class UriWorker(BaseParserWorker):
             # Parse URL into components
             parsed_url = urlparse(url)
 
-            # Extract URL components
-            components = self._extract_url_components(parsed_url)
+            # # Extract URL components
+            # TODO: Will be added later
+            # components = self._extract_url_components(parsed_url)
 
             # Analyze URL path
             path_analysis = self._analyze_path(parsed_url.path)
@@ -107,7 +108,7 @@ class UriWorker(BaseParserWorker):
             # Identify issues with URL structure
             issues = self._identify_url_issues(
                 url,
-                components,
+                #components,  # TODO: Will be added later
                 path_analysis,
                 query_analysis,
                 seo_characteristics
@@ -118,7 +119,7 @@ class UriWorker(BaseParserWorker):
                 "url": url,
                 "decoded_url": decoded_url,
                 "length": url_length,
-                "components": components,
+                #"components": components,  # TODO: Will be added later
                 "path_analysis": path_analysis,
                 "query_analysis": query_analysis,
                 "fragment_analysis": fragment_analysis,
@@ -422,15 +423,16 @@ class UriWorker(BaseParserWorker):
             dict: Mobile characteristics
         """
         # Check for AMP URL patterns
-        amp_pattern = r'(\/amp\/|\.amp$|amp=1|\/amp$)'
-        is_amp_url = bool(re.search(amp_pattern, url))
+        # TODO: Will be added later
+        # amp_pattern = r'(\/amp\/|\.amp$|amp=1|\/amp$)'
+        # is_amp_url = bool(re.search(amp_pattern, url))
 
         # Check for mobile-specific URL patterns
         mobile_pattern = r'(^m\.|\/m\/|^mobile\.|\/mobile\/)'
         is_mobile_url = bool(re.search(mobile_pattern, url))
 
         return {
-            "is_amp_url": is_amp_url,
+            #"is_amp_url": is_amp_url,  # TODO: Will be added later
             "is_mobile_url": is_mobile_url
         }
 
@@ -473,12 +475,14 @@ class UriWorker(BaseParserWorker):
             issues.append("special_chars_in_url")
 
         # Check protocol
-        if components["scheme"] != "https":
-            issues.append("not_using_https")
+        # TODO: Will be added later
+        # if components["scheme"] != "https":
+        #     issues.append("not_using_https")
 
         # Check credentials in URL
-        if components["username"] or components["password"]:
-            issues.append("credentials_in_url")
+        # TODO: Will be added later
+        # if components["username"] or components["password"]:
+        #     issues.append("credentials_in_url")
 
         # Check for problematic file extensions
         problematic_extensions = ['exe', 'zip', 'rar', 'doc', 'docx', 'pdf', 'xls', 'xlsx', 'ppt', 'pptx']

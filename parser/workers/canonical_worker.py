@@ -115,10 +115,12 @@ class CanonicalWorker(BaseParserWorker):
                 is_self_canonical = self._normalize_url(canonical_url) == self._normalize_url(current_url)
 
             # Check if page is being canonicalized elsewhere (canonical exists but not pointing to self)
-            is_canonicalized = has_canonical and not is_self_canonical
+            # TODO: Will be added later
+            # is_canonicalized = has_canonical and not is_self_canonical
 
             # Check for conflicts between HTML and HTTP header canonicals
-            has_canonical_conflict = canonical_url and http_canonical and canonical_url != http_canonical
+            # TODO: Will be added later
+            #has_canonical_conflict = canonical_url and http_canonical and canonical_url != http_canonical
 
             # Collect all canonical declarations
             all_canonical_tags = []
@@ -159,8 +161,9 @@ class CanonicalWorker(BaseParserWorker):
                 issues.append("multiple_canonicals")
 
             # Canonical conflict
-            if has_canonical_conflict:
-                issues.append("canonical_conflict")
+            # TODO: Will be added later
+            # if has_canonical_conflict:
+            #     issues.append("canonical_conflict")
 
             # Check for robots meta tag with noindex
             meta_robots = soup.find("meta", attrs={"name": "robots"})
@@ -184,9 +187,9 @@ class CanonicalWorker(BaseParserWorker):
                 "http_canonical": http_canonical,
                 "has_canonical": has_canonical,
                 "is_self_canonical": is_self_canonical,
-                "is_canonicalized": is_canonicalized,
+                #"is_canonicalized": is_canonicalized,  # TODO: Will be added later
                 "has_multiple_canonicals": has_multiple_canonicals,
-                "has_canonical_conflict": has_canonical_conflict if (canonical_url and http_canonical) else None,
+                #"has_canonical_conflict": has_canonical_conflict if (canonical_url and http_canonical) else None,  # TODO: Will be added later
                 "all_canonical_tags": all_canonical_tags,
                 "issues": issues
             }

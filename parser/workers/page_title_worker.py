@@ -76,17 +76,18 @@ class PageTitleWorker(BaseParserWorker):
             og_tags = self._extract_og_tags(soup)
 
             # Extract Twitter tags
-            twitter_tags = self._extract_twitter_tags(soup)
+            # TODO: Will be added later
+            #twitter_tags = self._extract_twitter_tags(soup)
 
             page_title_data = {
                 "title": title_text,
                 "title_length": title_length,
-                "meta_keywords": meta_data["keywords"],
+                # "meta_keywords": meta_data["keywords"],   # TODO: Will be added later
                 "canonical_url": meta_data["canonical_url"],
                 "robots": meta_data["robots"],
                 "hreflang_tags": hreflang_tags,
                 "og_tags": og_tags,
-                "twitter_tags": twitter_tags
+                # "twitter_tags": twitter_tags  # TODO: Will be added later
             }
 
             self.logger.debug(
@@ -113,11 +114,12 @@ class PageTitleWorker(BaseParserWorker):
         meta_info = {}
 
         # Extract meta keywords
-        meta_keywords_tag = soup.find("meta", attrs={"name": "keywords"})
-        meta_info["keywords"] = (
-            meta_keywords_tag.get("content", "").strip()
-            if meta_keywords_tag else None
-        )
+        # TODO: Will be added later
+        # meta_keywords_tag = soup.find("meta", attrs={"name": "keywords"})
+        # meta_info["keywords"] = (
+        #     meta_keywords_tag.get("content", "").strip()
+        #     if meta_keywords_tag else None
+        # )
 
         # Extract canonical URL
         canonical_tag = soup.find("link", rel="canonical")

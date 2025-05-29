@@ -252,7 +252,9 @@ class ImagesWorker(BaseParserWorker):
         # Add statistical data
         image_analysis['stats'] = {
             'total_count': len(images),
-            'alt_text_percent': self._calculate_percentage(len(image_analysis['have_alt_text']), len(images)),
+            # TODO: Will be added later
+            # 'alt_text_percent': self._calculate_percentage(len(image_analysis['have_alt_text']), len(images)),
+            'alt_text_count': len(image_analysis['have_alt_text']),
             'missing_alt_count': len(image_analysis['missing_alt_text']),
             'missing_dimensions_count': len(image_analysis['missing_dimensions']),
             'oversized_count': len(image_analysis['oversized_images']),

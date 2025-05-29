@@ -90,10 +90,11 @@ class HeadingsWorker(BaseParserWorker):
             structure_analysis = self._analyze_heading_structure(all_headings)
 
             # Calculate similarity between page title and H1
-            page_title_similarity = None
-            if page_title and heading_levels['h1']['elements']:
-                first_h1 = heading_levels['h1']['elements'][0]['text']
-                page_title_similarity = self._calculate_similarity(page_title, first_h1)
+            # TODO: Will be added later
+            # page_title_similarity = None
+            # if page_title and heading_levels['h1']['elements']:
+            #     first_h1 = heading_levels['h1']['elements'][0]['text']
+            #     page_title_similarity = self._calculate_similarity(page_title, first_h1)
 
             # Calculate keyword consistency
             keyword_consistency = self._analyze_keyword_consistency(
@@ -194,7 +195,7 @@ class HeadingsWorker(BaseParserWorker):
             element = {
                 'text': text,
                 'length': length,
-                'contains_html': self._has_html_elements(h_tag)
+                #'contains_html': self._has_html_elements(h_tag)  # TODO: Will be added later
             }
             elements.append(element)
 

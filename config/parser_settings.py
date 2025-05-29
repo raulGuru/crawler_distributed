@@ -38,12 +38,13 @@ ALL_PARSER_TASK_TYPES = {
         "instances": int(os.getenv("CANONICAL_INSTANCES", DEFAULT_INSTANCES)),
         "worker_script_file": "canonical_worker.py"
     },
-    "amp": {
-        "priority": DEFAULT_PRIORITY,
-        "ttr": DEFAULT_TTR,
-        "instances": int(os.getenv("AMP_INSTANCES", DEFAULT_INSTANCES)),
-        "worker_script_file": "amp_worker.py"
-    },
+    # TODO: Will be added later
+    # "amp": {
+    #     "priority": DEFAULT_PRIORITY,
+    #     "ttr": DEFAULT_TTR,
+    #     "instances": int(os.getenv("AMP_INSTANCES", DEFAULT_INSTANCES)),
+    #     "worker_script_file": "amp_worker.py"
+    # },
     "directives": {
         "priority": DEFAULT_PRIORITY,
         "ttr": DEFAULT_TTR,

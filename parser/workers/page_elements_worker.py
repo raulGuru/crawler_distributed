@@ -72,11 +72,12 @@ class PageElementsWorker(BaseParserWorker):
             text_metrics = self._extract_text_metrics(soup)
 
             # Extract readability metrics
-            readability_metrics = self._calculate_readability_metrics(
-                text_metrics["word_count"],
-                text_metrics["sentence_count"],
-                text_metrics["paragraph_count"]
-            )
+            # TODO: Will be added later
+            # readability_metrics = self._calculate_readability_metrics(
+            #     text_metrics["word_count"],
+            #     text_metrics["sentence_count"],
+            #     text_metrics["paragraph_count"]
+            # )
 
             # Extract script and resource metrics
             script_metrics = self._extract_script_metrics(soup, domain)
@@ -88,9 +89,10 @@ class PageElementsWorker(BaseParserWorker):
             performance_metrics = self._extract_performance_metrics(html_content)
 
             # Calculate content quality score
-            content_quality_score = self._calculate_content_quality_score(
-                text_metrics, element_counts, image_metrics
-            )
+            # TODO: Will be added later
+            # content_quality_score = self._calculate_content_quality_score(
+            #     text_metrics, element_counts, image_metrics
+            # )
 
             # Determine HTTPS status
             is_https = self._is_https(url)
@@ -107,7 +109,7 @@ class PageElementsWorker(BaseParserWorker):
                 "is_https": is_https,
 
                 # Content quality score
-                "content_quality_score": content_quality_score,
+                # "content_quality_score": content_quality_score,  # TODO: Will be added later
 
                 # Element counts
                 "lists": element_counts["lists"],
@@ -127,8 +129,8 @@ class PageElementsWorker(BaseParserWorker):
                 "character_count": text_metrics["character_count"],
                 "sentence_count": text_metrics["sentence_count"],
                 "paragraph_count": text_metrics["paragraph_count"],
-                "avg_words_per_sentence": text_metrics["avg_words_per_sentence"],
-                "avg_sentences_per_paragraph": text_metrics["avg_sentences_per_paragraph"],
+                #"avg_words_per_sentence": text_metrics["avg_words_per_sentence"],
+                #"avg_sentences_per_paragraph": text_metrics["avg_sentences_per_paragraph"],
                 "content_length": text_metrics["content_length"],
 
                 # Image metrics
@@ -137,7 +139,7 @@ class PageElementsWorker(BaseParserWorker):
                 "images_without_alt_count": image_metrics["images_without_alt_count"],
 
                 # Readability metrics
-                "readability": readability_metrics,
+                #"readability": readability_metrics,  # TODO: Will be added later
 
                 # Script metrics
                 "file_script_count": script_metrics["file_script_count"],
@@ -312,8 +314,8 @@ class PageElementsWorker(BaseParserWorker):
             "character_count": character_count,
             "sentence_count": sentence_count,
             "paragraph_count": paragraph_count,
-            "avg_words_per_sentence": avg_words_per_sentence,
-            "avg_sentences_per_paragraph": avg_sentences_per_paragraph,
+            #"avg_words_per_sentence": avg_words_per_sentence,
+            #"avg_sentences_per_paragraph": avg_sentences_per_paragraph,
             "content_length": content_length,
         }
 

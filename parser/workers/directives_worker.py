@@ -219,18 +219,19 @@ class DirectivesWorker(BaseParserWorker):
         directive_flags = {
             "has_noindex": False,
             "has_nofollow": False,
-            "has_none": False,
-            "has_noarchive": False,
-            "has_nosnippet": False,
-            "has_notranslate": False,
             "has_noimageindex": False,
-            "has_unavailable_after": False,
-            "has_max_snippet": False,
-            "has_max_image_preview": False,
-            "has_max_video_preview": False,
             "has_index": False,
             "has_follow": False,
-            "has_all": False
+            # TODO: Will be added later
+            # "has_none": False,
+            # "has_noarchive": False,
+            # "has_nosnippet": False,
+            # "has_notranslate": False,
+            # "has_unavailable_after": False,
+            # "has_max_snippet": False,
+            # "has_max_image_preview": False,
+            # "has_max_video_preview": False,
+            # "has_all": False
         }
 
         # Check for each directive
@@ -240,22 +241,23 @@ class DirectivesWorker(BaseParserWorker):
                 directive_flags["has_noindex"] = True
             elif directive == "nofollow":
                 directive_flags["has_nofollow"] = True
-            elif directive == "none":
-                directive_flags["has_none"] = True
-            elif directive == "noarchive":
-                directive_flags["has_noarchive"] = True
-            elif directive == "nosnippet":
-                directive_flags["has_nosnippet"] = True
-            elif directive == "notranslate":
-                directive_flags["has_notranslate"] = True
-            elif directive == "noimageindex":
-                directive_flags["has_noimageindex"] = True
             elif directive == "index":
                 directive_flags["has_index"] = True
             elif directive == "follow":
                 directive_flags["has_follow"] = True
-            elif directive == "all":
-                directive_flags["has_all"] = True
+            # TODO: Will be added later
+            # elif directive == "none":
+            #     directive_flags["has_none"] = True
+            # elif directive == "noarchive":
+            #     directive_flags["has_noarchive"] = True
+            # elif directive == "nosnippet":
+            #     directive_flags["has_nosnippet"] = True
+            # elif directive == "notranslate":
+            #     directive_flags["has_notranslate"] = True
+            # elif directive == "noimageindex":
+            #     directive_flags["has_noimageindex"] = True
+            # elif directive == "all":
+            #     directive_flags["has_all"] = True
             # Directives with parameters
             elif "unavailable_after:" in directive:
                 directive_flags["has_unavailable_after"] = True
@@ -328,9 +330,10 @@ class DirectivesWorker(BaseParserWorker):
         """
         directive_values = {
             "unavailable_after_date": None,
-            "max_snippet_value": None,
-            "max_image_preview_value": None,
-            "max_video_preview_value": None
+            # TODO: Will be added later
+            # "max_snippet_value": None,
+            # "max_image_preview_value": None,
+            # "max_video_preview_value": None
         }
 
         for directive in all_directives:
@@ -340,23 +343,24 @@ class DirectivesWorker(BaseParserWorker):
                 if match:
                     directive_values["unavailable_after_date"] = match.group(1).strip()
 
+            # TODO: Will be added later
             # Extract max-snippet value
-            elif "max-snippet:" in directive:
-                match = re.search(r'max-snippet:\s*(\-*\d+)', directive)
-                if match:
-                    directive_values["max_snippet_value"] = match.group(1).strip()
+            # elif "max-snippet:" in directive:
+            #     match = re.search(r'max-snippet:\s*(\-*\d+)', directive)
+            #     if match:
+            #         directive_values["max_snippet_value"] = match.group(1).strip()
 
-            # Extract max-image-preview value
-            elif "max-image-preview:" in directive:
-                match = re.search(r'max-image-preview:\s*(\w+)', directive)
-                if match:
-                    directive_values["max_image_preview_value"] = match.group(1).strip()
+            # # Extract max-image-preview value
+            # elif "max-image-preview:" in directive:
+            #     match = re.search(r'max-image-preview:\s*(\w+)', directive)
+            #     if match:
+            #         directive_values["max_image_preview_value"] = match.group(1).strip()
 
-            # Extract max-video-preview value
-            elif "max-video-preview:" in directive:
-                match = re.search(r'max-video-preview:\s*(\-*\d+)', directive)
-                if match:
-                    directive_values["max_video_preview_value"] = match.group(1).strip()
+            # # Extract max-video-preview value
+            # elif "max-video-preview:" in directive:
+            #     match = re.search(r'max-video-preview:\s*(\-*\d+)', directive)
+            #     if match:
+            #         directive_values["max_video_preview_value"] = match.group(1).strip()
 
         return directive_values
 
