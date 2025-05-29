@@ -10,12 +10,10 @@ page sitemap filtering.
 """
 
 import logging
-import time
 import re
-import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 import requests
 from lxml import etree
