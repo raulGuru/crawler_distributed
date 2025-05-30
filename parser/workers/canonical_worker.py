@@ -69,10 +69,6 @@ class CanonicalWorker(BaseParserWorker):
             headers_file_path = self.job_data.get('headers_file_path')
             response_headers = self._load_headers_from_file(headers_file_path)
             if not response_headers:
-                self.logger.warning(f"headers_file_path not found for doc_id {doc_id_str}")
-                response_headers = {}
-            else:
-                self.logger.warning(f"headers_file_path not found for doc_id {doc_id_str}")
                 response_headers = {}
 
             # Extract canonical URL from HTML link element

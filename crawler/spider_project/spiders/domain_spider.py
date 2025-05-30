@@ -549,11 +549,19 @@ class DomainSpider(BaseSpider):
 
         # Yield the parsed page data (only for valid HTML responses)
         try:
+            # TODO: Commented out for now as it's not needed for now
+            # if not response.headers:
+            #     logger.warning(f"No headers for {response.url} (status: {response.status})")
+
             output = {
                 'url': response.url,
                 'status': response.status,
                 'html': response.text,
-                'response_headers': {k.decode('utf-8'): [v.decode('utf-8') for v in response.headers.getlist(k)] for k in response.headers.keys()},
+                'response_headers': {
+                    (k.decode('utf-8') if isinstance(k, bytes) else str(k)):
+                    [(v.decode('utf-8') if isinstance(v, bytes) else str(v)) for v in response.headers.getlist(k)]
+                    for k in response.headers.keys()
+                },
                 'job_id': self.job_id,
                 'crawl_id': self.crawl_id,
                 'domain': self.domain,

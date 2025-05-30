@@ -177,6 +177,9 @@ class BaseParserWorker(abc.ABC):
 
     def _load_headers_from_file(self, headers_file_path: str) -> dict | None:
         """Load headers from file with proper error handling."""
+        if not headers_file_path:
+            self.logger.warning(f"[{self.worker_name}] No headers file path found for doc_id {self.job_data.get('document_id')} in task {self.task_type}")
+            return None
         try:
             with open(headers_file_path, 'r', encoding='utf-8') as hf:
                 return json.load(hf)

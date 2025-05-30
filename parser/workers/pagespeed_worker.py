@@ -64,7 +64,8 @@ class PageSpeedWorker(BaseParserWorker):
 
             # Get response time from job metadata (if available)
             response_time_seconds = None
-            headers = self._load_headers_from_file(self.job_data['headers_file_path'])
+            headers_file_path = self.job_data.get('headers_file_path')
+            headers = self._load_headers_from_file(headers_file_path)
             if headers:
                 response_time_seconds = headers.get('download_latency', '')
 

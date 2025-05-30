@@ -65,11 +65,7 @@ class DirectivesWorker(BaseParserWorker):
 
             headers_file_path = self.job_data.get('headers_file_path')
             response_headers = self._load_headers_from_file(headers_file_path)
-
             if not response_headers:
-                self.logger.warning(
-                    f"Failed to load headers or headers file not found for doc_id {doc_id_str} using path: {headers_file_path}. Proceeding without X-Robots-Tag."
-                )
                 response_headers = {}
 
 
@@ -269,11 +265,11 @@ class DirectivesWorker(BaseParserWorker):
                 directive_flags["has_max_video_preview"] = True
 
         # Handle defaults: if noindex is not specified, index is implied (unless none is present)
-        if not directive_flags["has_noindex"] and not directive_flags["has_none"] and not directive_flags["has_index"]:
+        if not directive_flags["has_noindex"] and not directive_flags["has_index"]: #and not directive_flags["has_none"]:
             directive_flags["has_index"] = True
 
         # Handle defaults: if nofollow is not specified, follow is implied (unless none is present)
-        if not directive_flags["has_nofollow"] and not directive_flags["has_none"] and not directive_flags["has_follow"]:
+        if not directive_flags["has_nofollow"] and not directive_flags["has_follow"]: #and not directive_flags["has_none"]:
             directive_flags["has_follow"] = True
 
         return directive_flags
@@ -384,9 +380,8 @@ class DirectivesWorker(BaseParserWorker):
             conflicts = True
 
         # Check for all vs. noindex/nofollow conflict
-        if directive_flags["has_all"] and (directive_flags["has_noindex"] or
-                                          directive_flags["has_nofollow"] or
-                                          directive_flags["has_none"]):
+        #if directive_flags["has_all"] and (directive_flags["has_noindex"] or directive_flags["has_nofollow"]) or directive_flags["has_none"]):
+        if (directive_flags["has_noindex"] or directive_flags["has_nofollow"]):
             conflicts = True
 
         return conflicts
@@ -411,7 +406,7 @@ class DirectivesWorker(BaseParserWorker):
 
         # Check for redundant directives (index and follow are default if not overridden)
         # A directive like "index" is only redundant if "noindex" and "none" are absent.
-        if directive_flags["has_index"] and not directive_flags["has_noindex"] and not directive_flags["has_none"]:
+        if directive_flags["has_index"] and not directive_flags["has_noindex"]: #and not directive_flags["has_none"]:
             # Check if "index" was explicitly stated or just default.
             # If "index" is in all_directives, it means it was explicitly stated.
             # Note: all_directives comes from combining meta, googlebot, and x-robots.
@@ -423,7 +418,7 @@ class DirectivesWorker(BaseParserWorker):
 
 
         # Check for noindex without nofollow (might waste crawl budget)
-        if directive_flags["has_noindex"] and not directive_flags["has_nofollow"] and not directive_flags["has_none"]:
+        if directive_flags["has_noindex"] and not directive_flags["has_nofollow"]: #and not directive_flags["has_none"]:
             issues.append("noindex_without_nofollow")
 
         # Check for different directives from meta tags vs. HTTP headers if both exist
@@ -451,7 +446,7 @@ class DirectivesWorker(BaseParserWorker):
             bool: True if the page is indexable, False otherwise.
         """
         # Not indexable if noindex or none is present
-        return not (directive_flags["has_noindex"] or directive_flags["has_none"])
+        return not (directive_flags["has_noindex"]) #or directive_flags["has_none"])
 
     def _determine_followability(self, directive_flags):
         """Determine overall followability based on directives.
@@ -463,7 +458,7 @@ class DirectivesWorker(BaseParserWorker):
             bool: True if links on the page should be followed, False otherwise.
         """
         # Not followable if nofollow or none is present
-        return not (directive_flags["has_nofollow"] or directive_flags["has_none"])
+        return not (directive_flags["has_nofollow"]) #or directive_flags["has_none"])
 
 
 def main():

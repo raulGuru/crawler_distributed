@@ -119,6 +119,8 @@ class HTMLStoragePipeline:
                         raise DropItem(f"Failed to save headers file: {str(e_headers)}")
                     except TypeError as e_json:
                         self.logger.error(f"Failed to serialize headers to JSON for {item['url']}: {str(e_json)}")
+                else:
+                    self.logger.warning(f"No response_headers found for {item['url']}")
 
                 # Add storage info to item
                 item['storage'] = {
