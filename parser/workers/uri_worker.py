@@ -436,12 +436,11 @@ class UriWorker(BaseParserWorker):
             "is_mobile_url": is_mobile_url
         }
 
-    def _identify_url_issues(self, url, components, path_analysis, query_analysis, seo_characteristics):
+    def _identify_url_issues(self, url, path_analysis, query_analysis, seo_characteristics):
         """Identify issues with URL structure.
 
         Args:
             url (str): The URL
-            components (dict): URL components
             path_analysis (dict): Path analysis
             query_analysis (dict): Query analysis
             seo_characteristics (dict): SEO characteristics

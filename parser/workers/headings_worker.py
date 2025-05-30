@@ -118,7 +118,7 @@ class HeadingsWorker(BaseParserWorker):
                 'h4': heading_levels['h4'],
                 'h5': heading_levels['h5'],
                 'h6': heading_levels['h6'],
-                'page_title_similarity': page_title_similarity,
+                # 'page_title_similarity': page_title_similarity, # TODO: Will be added later
                 'keyword_consistency': keyword_consistency,
                 'heading_structure': structure_analysis,
                 'overall_issues': overall_issues
