@@ -362,6 +362,8 @@ class BaseSpider(Spider):
         # Add skipped URLs count to stats
         if hasattr(self, 'crawler') and hasattr(self.crawler, 'stats'):
             self.crawler.stats.set_value('skipped_urls_count', len(self.stats['skipped_urls']))
+            self.crawler.stats.set_value('proxy_used', self.stats['proxy_used'])
+            self.crawler.stats.set_value('js_rendering_used', self.stats['js_rendering_used'])
 
         logger.info(f"Spider closed ({reason}). Stats: {self.stats}")
 

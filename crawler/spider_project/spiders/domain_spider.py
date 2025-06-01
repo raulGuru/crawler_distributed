@@ -613,5 +613,10 @@ class DomainSpider(BaseSpider):
 
         logger.info(f"URLs crawled: {len(self.crawled_urls)}, Pages processed: {self.unique_pages_crawled}")
 
+        if hasattr(self, 'crawler') and hasattr(self.crawler, 'stats'):
+            stats = self.crawler.stats
+            stats.set_value('pages_crawled', self.unique_pages_crawled)
+            stats.set_value('crawl_strategy', strategy_used)
+
         # Call parent's closed method
         super().closed(reason)

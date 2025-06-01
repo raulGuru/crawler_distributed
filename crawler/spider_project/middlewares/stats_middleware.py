@@ -11,9 +11,13 @@ including domain-specific metrics, resource types, and error rates.
 import logging
 import time
 from collections import defaultdict
+from typing import Any, Dict
 from urllib.parse import urlparse
 from scrapy import signals
 from scrapy.exceptions import NotConfigured
+
+from config.base_settings import MONGO_CRAWL_JOB_COLLECTION
+from lib.storage.mongodb_client import MongoDBClient
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +116,12 @@ class StatsMiddleware:
         spider.crawler.stats.set_value('stats/total_response_time', 0)
         spider.crawler.stats.set_value('stats/total_bytes_received', 0)
 
+        # Ensure crawl_id is present in spider.stats for downstream use
+        if hasattr(spider, 'crawl_id') and spider.crawl_id:
+            if not hasattr(spider, 'stats'):
+                spider.stats = {}
+            spider.stats['crawl_id'] = spider.crawl_id
+
     def spider_closed(self, spider):
         """
         Called when spider is closed.
@@ -138,6 +148,9 @@ class StatsMiddleware:
         # Dump detailed stats if enabled
         if self.stats_dump:
             self._dump_detailed_stats(spider)
+
+        # Dump crawl stats to MongoDB if crawl_id is present
+        self._update_crawl_stats(spider)
 
     def spider_idle(self, spider):
         """
@@ -351,3 +364,36 @@ class StatsMiddleware:
             return main_type
 
         return None
+
+    def _update_crawl_stats(self, spider):
+        """
+        Update crawl stats in MongoDB.
+        """
+        crawl_id = spider.stats.get("crawl_id")
+        if not crawl_id:
+            logger.error("Missing 'crawl_id' in spider.stats – skipping stats persistence.")
+            return
+
+        stats: Dict[str, Any] = spider.crawler.stats.get_stats() or {}
+        if not stats:
+            logger.error("stats are empty; skipping stats persistence.")
+
+        try:
+            mongodb_client = MongoDBClient(logger=logger)
+            mongodb_client.update_one(MONGO_CRAWL_JOB_COLLECTION, {'crawl_id': crawl_id}, {'$set': {'crawl_stats': self._sanitize_stats(stats)}})
+        except Exception as e:
+            logger.error(f"Error updating stats for crawl_id {crawl_id}: {e}")
+        finally:
+            if mongodb_client:
+                mongodb_client.close()
+
+    def _sanitize_stats(self, stats: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Replace disallowed MongoDB characters in keys ('.' and '$').
+        MongoDB forbids keys containing '.' or starting with '$'.
+        """
+        def scrub(key: str) -> str:
+            key = key.replace(".", "_")
+            return key.lstrip("$")
+
+        return {scrub(k): v for k, v in stats.items()}

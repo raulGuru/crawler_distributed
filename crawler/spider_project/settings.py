@@ -192,7 +192,7 @@ DOWNLOADER_MIDDLEWARES = {
 # Pipeline configuration (consolidated)
 ITEM_PIPELINES = {
     'crawler.spider_project.pipelines.html_storage_pipeline.HTMLStoragePipeline': 100,
-    'crawler.spider_project.pipelines.stats_pipeline.StatsPipeline': 200,
+    # 'crawler.spider_project.pipelines.stats_pipeline.StatsPipeline': 200, # TODO: Uncomment this when stats pipeline is ready
     'crawler.spider_project.pipelines.parser_trigger_pipeline.ParserTriggerPipeline': 300,
 }
 
