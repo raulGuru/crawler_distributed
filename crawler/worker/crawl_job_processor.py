@@ -58,7 +58,7 @@ class CrawlJobProcessor:
             if crawl_id:
                 update_data = {
                     'job_id': job_id,
-                    'job_data': job_data,
+                    # 'job_data': job_data,
                     'crawl_status': status,
                     'duration': duration,
                     'stdout': stdout,

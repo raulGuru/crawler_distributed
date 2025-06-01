@@ -168,8 +168,9 @@ def submit_crawl_job(args):
 
     # Prepare the MongoDB document payload
     mongo_doc_payload = {
+        **job_data_for_beanstalkd,
         'job_id': beanstalkd_job_id,
-        'job_data': job_data_for_beanstalkd,
+        # 'job_data': job_data_for_beanstalkd,
         'crawl_status': 'fresh',
         'updated_at': datetime.utcnow()
     }
