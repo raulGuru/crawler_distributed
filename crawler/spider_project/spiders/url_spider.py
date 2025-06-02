@@ -142,6 +142,10 @@ class URLSpider(BaseSpider):
             **self.custom_params
         }
 
+        if hasattr(self, 'crawler') and hasattr(self.crawler, 'stats'):
+            stats = self.crawler.stats
+            stats.set_value('crawl_strategy', 'bfs')
+
         # Yield the parsed output directly to maintain consistency with DomainSpider
         yield output
 
