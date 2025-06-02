@@ -240,7 +240,7 @@ class DomainImporter:
             normalized_domain = self._normalize_domain(domain)
             # Default values for crawl parameters
             max_pages = 25
-            use_sitemap = True
+            use_sitemap = False
             single_url = False
             url = None
             if url_crawl:
