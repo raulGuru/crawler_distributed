@@ -345,11 +345,7 @@ class BaseSpider(Spider):
             'url': response.url,
             'html': response.text,
             'content_type': response.headers.get('Content-Type', b'').decode('utf-8', 'ignore'),
-            'status': response.status,
-            'crawl_strategy': {
-                'proxy_used': response.meta.get('use_proxy', False),
-                'js_render_used': response.meta.get('js_render', False)
-            }
+            'status': response.status
         }
 
     def closed(self, reason: str):
