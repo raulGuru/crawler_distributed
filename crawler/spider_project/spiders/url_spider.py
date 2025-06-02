@@ -138,6 +138,7 @@ class URLSpider(BaseSpider):
             'job_id': self.job_id,
             'crawl_id': self.crawl_id,
             'domain': self.domain,
+            'crawl_strategy': 'bfs',
             **self.custom_params
         }
 
