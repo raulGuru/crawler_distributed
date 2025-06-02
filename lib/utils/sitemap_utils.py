@@ -35,14 +35,19 @@ PAGE_SITEMAP_KEYWORDS = [
     'pages',
     'static',
     'content',
-    'main'
+    'main',
+    'post',
+    'posts',
+    'blog',
 ]
 
 # Keywords that indicate non-page content (to deprioritize)
 NON_PAGE_SITEMAP_KEYWORDS = [
-    'post',
-    'posts',
-    'blog',
+    'news',
+    'newsletter',
+    'newsletters',
+    'newsletter-archive',
+    'newsletter-archive',
     'article',
     'articles',
     'category',
