@@ -513,6 +513,44 @@ class QueueManager:
             self.logger.error(f"Failed to get queue stats: {str(e)}")
             return stats
 
+    def stats_tube(self, tube_name: str) -> dict:
+        """
+        Get statistics for a specific tube.
+
+        Args:
+            tube_name (str): Name of the tube to get stats for
+
+        Returns:
+            dict: Tube statistics including current-jobs-ready, current-jobs-reserved, etc.
+                  Returns dict with zero values if tube doesn't exist or on error.
+        """
+        try:
+            tube_stats = self.client.stats_tube(tube_name)
+            self.logger.debug(f"Retrieved stats for tube '{tube_name}': {tube_stats}")
+            return tube_stats
+        except Exception as e:
+            # Handle the case where tube doesn't exist or other errors
+            error_msg = str(e)
+            if "not found" in error_msg.lower() or not error_msg or error_msg == "[]":
+                # Tube doesn't exist yet, return zeros
+                self.logger.info(f"Tube '{tube_name}' doesn't exist yet. Returning default stats with zeros.")
+                return {
+                    'current-jobs-ready': 0,
+                    'current-jobs-reserved': 0,
+                    'current-jobs-delayed': 0,
+                    'current-jobs-buried': 0,
+                    'total-jobs': 0
+                }
+            else:
+                self.logger.error(f"Failed to get stats for tube '{tube_name}': {error_msg}")
+                return {
+                    'current-jobs-ready': 0,
+                    'current-jobs-reserved': 0,
+                    'current-jobs-delayed': 0,
+                    'current-jobs-buried': 0,
+                    'total-jobs': 0
+                }
+
     def get_detailed_monitoring_view(self):
         """
         Provides a detailed, comprehensive view of the Beanstalkd instance,
