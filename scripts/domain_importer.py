@@ -4,7 +4,7 @@
 """
 Domain CSV to MongoDB Importer
 
-This script reads domain names from a CSV file and inserts them into
+This script reads domain names and project IDs from a CSV file and inserts them into
 the domains_crawl MongoDB collection. It follows the existing codebase
 patterns for error handling, logging, and database operations.
 """
@@ -15,7 +15,7 @@ import csv
 import argparse
 import logging
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from pathlib import Path
 
 # Add the project root to the path
@@ -27,7 +27,7 @@ from lib.utils.logging_utils import LoggingUtils
 
 class DomainImporter:
     """
-    Handles importing domain names from CSV files into MongoDB.
+    Handles importing domain names and project IDs from CSV files into MongoDB.
 
     This class follows the Single Responsibility Principle by focusing
     solely on the domain import functionality.
@@ -74,20 +74,21 @@ class DomainImporter:
         logger.propagate = False
         return logger
 
-    def _read_domains_from_csv(self, domain_column: str = 'domain') -> List[str]:
+    def _read_domains_from_csv(self, domain_column: str = 'domain', project_id_column: str = 'project_id') -> List[Tuple[str, str]]:
         """
-        Read domain names from CSV file or simple text file.
+        Read domain names and project IDs from CSV file or simple text file.
 
         Args:
             domain_column (str): Name of the column containing domain names
+            project_id_column (str): Name of the column containing project IDs
 
         Returns:
-            List[str]: List of domain names
+            List[Tuple[str, str]]: List of (project_id, domain) tuples
 
         Raises:
             ValueError: If domain column not found or file is invalid
         """
-        domains = []
+        domains_data = []
 
         try:
             with open(self.csv_file_path, 'r', encoding='utf-8') as file:
@@ -101,11 +102,12 @@ class DomainImporter:
                     for line_num, line in enumerate(file, start=1):
                         domain = line.strip()
                         if domain and not domain.startswith('#'):  # Skip comments
-                            domains.append(domain)
+                            # For simple text files, use line number as project_id or empty string
+                            domains_data.append(('', domain))
                         elif not domain:
                             self.logger.debug(f"Empty line found at line {line_num}")
 
-                    self.logger.info(f"Read {len(domains)} domains from text file")
+                    self.logger.info(f"Read {len(domains_data)} domains from text file")
 
                 else:
                     # Try to process as CSV
@@ -119,7 +121,7 @@ class DomainImporter:
                         self.logger.info(f"Detected CSV format with delimiter '{delimiter}', headers: {has_header}")
 
                     except csv.Error:
-                        # If sniffer fails, assume comma-separated or single column
+                        # If sniffer fails, assume comma-separated
                         delimiter = ',' if ',' in sample else None
                         has_header = False
 
@@ -127,45 +129,41 @@ class DomainImporter:
                         first_line = file.readline().strip()
                         file.seek(0)
 
-                        if (not delimiter and
+                        if (delimiter and
                             first_line and
-                            not self._looks_like_domain(first_line)):
+                            not self._looks_like_domain(first_line.split(delimiter)[-1] if delimiter in first_line else first_line)):
                             has_header = True
-                            self.logger.info("Detected single column with header")
+                            self.logger.info("Detected CSV with header")
                         else:
-                            self.logger.info("Detected single column without header")
+                            self.logger.info("Detected CSV without header")
 
                     # Read the CSV data
                     file.seek(0)
 
                     if delimiter:
                         # Multi-column CSV
-                        reader = csv.DictReader(file, delimiter=delimiter) if has_header else csv.reader(file, delimiter=delimiter)
+                        reader = csv.reader(file, delimiter=delimiter)
 
                         if has_header:
-                            # Use column name to extract domains
-                            if domain_column not in reader.fieldnames:
-                                available_columns = ', '.join(reader.fieldnames)
-                                raise ValueError(
-                                    f"Column '{domain_column}' not found. "
-                                    f"Available columns: {available_columns}"
-                                )
+                            # Skip header row
+                            header = next(reader)
+                            self.logger.info(f"CSV headers: {header}")
 
-                            for row_num, row in enumerate(reader, start=2):  # Start at 2 due to header
-                                domain = row.get(domain_column, '').strip()
+                        for row_num, row in enumerate(reader, start=2 if has_header else 1):
+                            if row and len(row) >= 2:
+                                project_id = row[0].strip()
+                                domain = row[1].strip()
                                 if domain:
-                                    domains.append(domain)
+                                    domains_data.append((project_id, domain))
                                 elif domain == '':
                                     self.logger.warning(f"Empty domain found in row {row_num}")
-                        else:
-                            # Assume first column contains domains
-                            for row_num, row in enumerate(reader, start=1):
-                                if row and len(row) > 0:
-                                    domain = row[0].strip()
-                                    if domain:
-                                        domains.append(domain)
-                                    else:
-                                        self.logger.warning(f"Empty domain found in row {row_num}")
+                            elif row and len(row) == 1:
+                                # Single column, treat as domain with empty project_id
+                                domain = row[0].strip()
+                                if domain:
+                                    domains_data.append(('', domain))
+                            else:
+                                self.logger.warning(f"Invalid row format in row {row_num}: {row}")
                     else:
                         # Single column without delimiter
                         if has_header:
@@ -175,7 +173,7 @@ class DomainImporter:
                         for line_num, line in enumerate(file, start=2 if has_header else 1):
                             domain = line.strip()
                             if domain and not domain.startswith('#'):  # Skip comments
-                                domains.append(domain)
+                                domains_data.append(('', domain))
                             elif not domain:
                                 self.logger.debug(f"Empty line found at line {line_num}")
 
@@ -184,15 +182,21 @@ class DomainImporter:
             LoggingUtils.log_exception(self.logger, e, "File reading failed")
             raise
 
-        # Remove duplicates while preserving order
-        unique_domains = list(dict.fromkeys(domains))
+        # Remove duplicates while preserving order (based on domain)
+        seen_domains = set()
+        unique_domains_data = []
 
-        if len(domains) != len(unique_domains):
-            duplicates_removed = len(domains) - len(unique_domains)
+        for project_id, domain in domains_data:
+            if domain not in seen_domains:
+                seen_domains.add(domain)
+                unique_domains_data.append((project_id, domain))
+
+        if len(domains_data) != len(unique_domains_data):
+            duplicates_removed = len(domains_data) - len(unique_domains_data)
             self.logger.info(f"Removed {duplicates_removed} duplicate domain(s)")
 
-        self.logger.info(f"Successfully read {len(unique_domains)} unique domains from file")
-        return unique_domains
+        self.logger.info(f"Successfully read {len(unique_domains_data)} unique domains from file")
+        return unique_domains_data
 
     def _looks_like_domain(self, text: str) -> bool:
         """
@@ -222,12 +226,13 @@ class DomainImporter:
         # Very basic validation - just check it's not obviously a header
         return not any(word in text for word in ['domain', 'website', 'url', 'site', 'name'])
 
-    def _prepare_domain_documents(self, domains: List[str], url_crawl: bool = False) -> List[Dict[str, Any]]:
+    def _prepare_domain_documents(self, domains_data: List[Tuple[str, str]], url_crawl: bool = False) -> List[Dict[str, Any]]:
         """
         Prepare domain documents for MongoDB insertion.
 
         Args:
-            domains (List[str]): List of domain names
+            domains_data (List[Tuple[str, str]]): List of (project_id, domain) tuples
+            url_crawl (bool): Whether to set up for URL crawling
 
         Returns:
             List[Dict[str, Any]]: List of domain documents ready for insertion
@@ -235,9 +240,10 @@ class DomainImporter:
         current_time = datetime.utcnow()
         documents = []
 
-        for domain in domains:
+        for project_id, domain in domains_data:
             # Normalize domain (remove www prefix, convert to lowercase)
             normalized_domain = self._normalize_domain(domain)
+
             # Default values for crawl parameters
             max_pages = 25
             use_sitemap = False
@@ -252,6 +258,7 @@ class DomainImporter:
             document = {
                 'domain': normalized_domain,
                 'original_domain': domain,  # Keep original for reference
+                'project_id': project_id,  # Add project_id to the document
                 'status': 'new',
                 'max_pages': max_pages,
                 'single_url': single_url,
@@ -327,17 +334,17 @@ class DomainImporter:
 
                     if existing:
                         stats['duplicates_skipped'] += 1
-                        self.logger.debug(f"Domain already exists, skipping: {doc['domain']}")
+                        self.logger.debug(f"Domain already exists, skipping: {doc['domain']} (project_id: {doc['project_id']})")
                     else:
                         # Insert new domain
                         self.mongodb_client.insert_one(self.collection_name, doc)
                         stats['successfully_inserted'] += 1
-                        self.logger.debug(f"Inserted domain: {doc['domain']}")
+                        self.logger.debug(f"Inserted domain: {doc['domain']} (project_id: {doc['project_id']})")
 
                 except Exception as doc_error:
                     stats['errors'] += 1
                     self.logger.error(
-                        f"Error inserting domain {doc['domain']}: {str(doc_error)}"
+                        f"Error inserting domain {doc['domain']} (project_id: {doc.get('project_id', 'N/A')}): {str(doc_error)}"
                     )
 
             # Log progress for large batches
@@ -348,6 +355,7 @@ class DomainImporter:
         return stats
 
     def import_domains(self, domain_column: str = 'domain',
+                      project_id_column: str = 'project_id',
                       batch_size: int = 100,
                       url_crawl: bool = False) -> Dict[str, int]:
         """
@@ -355,7 +363,9 @@ class DomainImporter:
 
         Args:
             domain_column (str): Name of the CSV column containing domains
+            project_id_column (str): Name of the CSV column containing project IDs
             batch_size (int): Number of documents to process per batch
+            url_crawl (bool): Whether to set up for URL crawling
 
         Returns:
             Dict[str, int]: Import statistics
@@ -366,16 +376,16 @@ class DomainImporter:
             # Initialize MongoDB connection
             self.mongodb_client = MongoDBClient(logger=self.logger)
 
-            # Read domains from file (CSV or text)
-            domains = self._read_domains_from_csv(domain_column)
+            # Read domains and project IDs from file (CSV or text)
+            domains_data = self._read_domains_from_csv(domain_column, project_id_column)
 
-            if not domains:
+            if not domains_data:
                 self.logger.warning("No domains found in input file")
                 return {'total_processed': 0, 'successfully_inserted': 0,
                        'duplicates_skipped': 0, 'errors': 0}
 
             # Prepare documents for insertion
-            documents = self._prepare_domain_documents(domains, url_crawl)
+            documents = self._prepare_domain_documents(domains_data, url_crawl)
 
             # Insert documents into MongoDB
             try:
@@ -409,16 +419,21 @@ def main():
     Main entry point for the domain importer script.
     """
     parser = argparse.ArgumentParser(
-        description='Import domain names from CSV or text file to MongoDB'
+        description='Import domain names and project IDs from CSV or text file to MongoDB'
     )
     parser.add_argument(
         'csv_file',
         help='Path to the CSV or text file containing domain names'
     )
     parser.add_argument(
-        '--column',
+        '--domain-column',
         default='domain',
         help='Name of the CSV column containing domain names (default: domain)'
+    )
+    parser.add_argument(
+        '--project-id-column',
+        default='project_id',
+        help='Name of the CSV column containing project IDs (default: project_id)'
     )
     parser.add_argument(
         '--collection',
@@ -433,8 +448,9 @@ def main():
     )
     parser.add_argument(
         '--url-crawl',
+        action='store_true',
         default=False,
-        help='Crawl the URL for the domain (default: False)'
+        help='Set up for URL crawling (default: False)'
     )
 
     args = parser.parse_args()
@@ -448,7 +464,8 @@ def main():
 
         # Import domains
         stats = importer.import_domains(
-            domain_column=args.column,
+            domain_column=args.domain_column,
+            project_id_column=args.project_id_column,
             batch_size=args.batch_size,
             url_crawl=args.url_crawl
         )
