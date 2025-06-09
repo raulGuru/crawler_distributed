@@ -326,20 +326,25 @@ class DomainImporter:
             # Process each document in the batch
             for doc in batch:
                 try:
-                    # Check if domain already exists
-                    existing = self.mongodb_client.find_one(
-                        self.collection_name,
-                        {'domain': doc['domain']}
-                    )
+                    # TEMP COMMENTED OUT: Check if domain already exists
+                    # existing = self.mongodb_client.find_one(
+                    #     self.collection_name,
+                    #     {'domain': doc['domain']}
+                    # )
 
-                    if existing:
-                        stats['duplicates_skipped'] += 1
-                        self.logger.debug(f"Domain already exists, skipping: {doc['domain']} (project_id: {doc['project_id']})")
-                    else:
-                        # Insert new domain
-                        self.mongodb_client.insert_one(self.collection_name, doc)
-                        stats['successfully_inserted'] += 1
-                        self.logger.debug(f"Inserted domain: {doc['domain']} (project_id: {doc['project_id']})")
+                    # if existing:
+                    #     stats['duplicates_skipped'] += 1
+                    #     self.logger.debug(f"Domain already exists, skipping: {doc['domain']} (project_id: {doc['project_id']})")
+                    # else:
+                    #     # Insert new domain
+                    #     self.mongodb_client.insert_one(self.collection_name, doc)
+                    #     stats['successfully_inserted'] += 1
+                    #     self.logger.debug(f"Inserted domain: {doc['domain']} (project_id: {doc['project_id']})")
+
+                    # TEMP: Always insert domain (no duplicate checking)
+                    self.mongodb_client.insert_one(self.collection_name, doc)
+                    stats['successfully_inserted'] += 1
+                    self.logger.debug(f"Inserted domain: {doc['domain']} (project_id: {doc['project_id']})")
 
                 except Exception as doc_error:
                     stats['errors'] += 1
