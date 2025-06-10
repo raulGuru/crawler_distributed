@@ -311,11 +311,7 @@ def bulk_ingest_domains_single_run(args, logger=None) -> int:
             domain_id_in_source = domain_doc['_id']
             domain_name = domain_doc.get('domain')
             url = domain_doc.get('url')
-            custom_params_from_doc = domain_doc.get('custom_params', {})  # Expects a dict
-            if 'cycle_id' in domain_doc:
-                custom_params_from_doc['cycle_id'] = domain_doc['cycle_id']
-            if 'project_id' in domain_doc:
-                custom_params_from_doc['project_id'] = domain_doc['project_id']
+
 
             if not domain_name:
                 logger.warning(f"Skipping domain with _id {domain_id_in_source} due to missing 'domain_name'.")
@@ -348,10 +344,17 @@ def bulk_ingest_domains_single_run(args, logger=None) -> int:
                     'max_pages': domain_doc.get('max_pages', DEFAULT_MAX_PAGES),
                     'single_url': domain_doc.get('single_url', DEFAULT_SINGLE_URL),
                     'use_sitemap': domain_doc.get('use_sitemap', DEFAULT_USE_SITEMAP),
+                    'cycle_id': domain_doc.get('cycle_id', 0),
+                    'project_id': domain_doc.get('project_id', 0),
                 }
-                # Overlay custom parameters from the domain document
-                if isinstance(custom_params_from_doc, dict):
-                    job_data_for_beanstalkd.update(custom_params_from_doc)
+                # Add any custom parameters to job_data
+                custom_params_from_doc = domain_doc.get('custom_params', {})  # Expects a dict
+                # Don't override existing parameters
+                for key, value in custom_params_from_doc.items():
+                    if key not in job_data_for_beanstalkd:
+                        job_data_for_beanstalkd[key] = value
+                    else:
+                        logger.warning(f"Custom parameter '{key}' conflicts with standard parameter, ignoring custom value.")
 
                 # Apply general defaults for any missing critical params
                 final_job_data = get_job_params(job_data_for_beanstalkd)

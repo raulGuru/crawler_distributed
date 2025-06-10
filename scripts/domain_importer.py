@@ -264,7 +264,7 @@ class DomainImporter:
                 'single_url': single_url,
                 'use_sitemap': use_sitemap,
                 'url': url,
-                'cycle_id': 2,
+                'cycle_id': 3,
                 'metadata': {
                     'source': 'csv_import',
                     'import_batch': current_time.strftime('%Y%m%d_%H%M%S')

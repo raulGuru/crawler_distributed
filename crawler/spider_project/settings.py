@@ -40,7 +40,7 @@ USER_AGENTS = [
 ]
 DEFAULT_USER_AGENT = random.choice(USER_AGENTS)
 ROTATE_USER_AGENT = True
-USER_AGENT_ROTATION_POLICY = 'per_domain'  # 'per_domain', 'per_request', or 'per_crawl'
+USER_AGENT_ROTATION_POLICY = 'per_request'  # 'per_domain', 'per_request', or 'per_crawl'
 
 # Concurrency settings
 CONCURRENT_REQUESTS = 4
@@ -55,7 +55,7 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 AUTOTHROTTLE_DEBUG = False
 DOWNLOAD_DELAY = 1 # 1 second between requests
 DOWNLOAD_TIMEOUT = 30
-# RANDOMIZE_DOWNLOAD_DELAY = True
+RANDOMIZE_DOWNLOAD_DELAY = True
 
 # Robots.txt handling
 ROBOTSTXT_OBEY = False
@@ -179,10 +179,11 @@ SKIPPED_EXTENSIONS = [
 # Middleware configuration (consolidated)
 DOWNLOADER_MIDDLEWARES = {
     'scrapy.downloadermiddlewares.retry.RetryMiddleware': None,
+    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
+    'crawler.spider_project.middlewares.user_agent_middleware.UserAgentMiddleware': 400,
     'scrapy.downloadermiddlewares.offsite.OffsiteMiddleware': 500,
     'crawler.spider_project.middlewares.retry_middleware.RetryMiddleware': 550,
     'crawler.spider_project.middlewares.proxy_middleware.ProxyMiddleware': 560,
-    'crawler.spider_project.middlewares.user_agent_middleware.UserAgentMiddleware': 570,
     'crawler.spider_project.middlewares.content_filter_middleware.ContentFilterMiddleware': 580,
     'crawler.spider_project.middlewares.js_rendering_middleware.JSRenderingMiddleware': 590,
     'crawler.spider_project.middlewares.stats_middleware.StatsMiddleware': 600,
