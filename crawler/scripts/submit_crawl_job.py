@@ -136,6 +136,14 @@ def submit_crawl_job(args):
         job_data_for_beanstalkd['single_url'] = args.single_url
     if args.use_sitemap is not None:
         job_data_for_beanstalkd['use_sitemap'] = args.use_sitemap
+    if args.project_id is not None:
+        job_data_for_beanstalkd['project_id'] = args.project_id
+    if args.cycle_id is not None:
+        job_data_for_beanstalkd['cycle_id'] = args.cycle_id
+    if args.use_proxy is not None:
+        job_data_for_beanstalkd['use_proxy'] = args.use_proxy
+    if args.use_js_rendering is not None:
+        job_data_for_beanstalkd['use_js_rendering'] = args.use_js_rendering
 
     # Add any custom parameters to job_data
     if custom_params:
@@ -170,7 +178,6 @@ def submit_crawl_job(args):
     mongo_doc_payload = {
         **job_data_for_beanstalkd,
         'job_id': beanstalkd_job_id,
-        # 'job_data': job_data_for_beanstalkd,
         'crawl_status': 'fresh',
         'updated_at': datetime.utcnow()
     }
@@ -211,6 +218,10 @@ def main():
     parser.add_argument('--url', help='URL to crawl (for single URL mode, implies domain)')
     parser.add_argument('--max-pages', type=int, default=None, help=f'Maximum pages to crawl (default: {DEFAULT_MAX_PAGES} from .env)')
     parser.add_argument('--single-url', action=argparse.BooleanOptionalAction, default=None, help='Crawl a single URL only (auto-set if --url is main identifier)')
+    parser.add_argument('--project-id', help='Project ID (MongoDB ObjectId)')
+    parser.add_argument('--cycle-id', type=int, default=0, help='Cycle ID (integer, default 0)')
+    parser.add_argument('--use-proxy', action=argparse.BooleanOptionalAction, default=False, help='Use proxy (boolean, default False)')
+    parser.add_argument('--use-js-rendering', action=argparse.BooleanOptionalAction, default=False, help='Use JS rendering (boolean, default False)')
     parser.add_argument('--custom-params', help='JSON string with custom parameters to be passed through the system (e.g., \'{"param1": "value1", "param2": 123}\')')
 
     sitemap_group = parser.add_mutually_exclusive_group()

@@ -121,8 +121,9 @@ class DomainSpider(BaseSpider):
         else:
             self.allowed_domains.append(f'www.{domain}')  # Also allow www
 
-        # Set start URLs
-        self.start_urls = start_urls or [f'http://{domain}', f'https://{domain}']
+        # Check if domain redirects HTTP→HTTPS (common pattern)
+        # Start with HTTPS for these known redirect domains
+        self.start_urls = start_urls or [f'https://{domain}']
 
         # Configure link extractor for BFS crawling
         self.link_extractor = LinkExtractor(
@@ -520,7 +521,7 @@ class DomainSpider(BaseSpider):
 
             # Enhanced logging with strategy information
             strategy_info = "sitemap" if self.sitemap_processed else "BFS"
-            logger.info(f"Crawled page {self.unique_pages_crawled}/{self._effective_max_pages}: {url} (via {strategy_info})")
+            logger.info(f"Processing page {self.unique_pages_crawled}/{self._effective_max_pages}: {url} (via {strategy_info})")
 
             # Only extract new links if we haven't reached the max pages limit
             if self.unique_pages_crawled < self._effective_max_pages:
@@ -530,6 +531,9 @@ class DomainSpider(BaseSpider):
                     for link in links:
                         if link.url not in self.crawled_urls and link.url not in self.currently_crawling:
                             self._enqueue_url(link.url)
+                        else:
+                            logger.debug(f"Skipping already processed URL: {link.url}")
+
                 except Exception as e:
                     logger.warning(f"Error extracting links from {url}: {str(e)}")
                     # Continue processing even if link extraction fails
@@ -547,12 +551,8 @@ class DomainSpider(BaseSpider):
                     else:
                         break
 
-        # Yield the parsed page data (only for valid HTML responses)
+                        # Yield the parsed page data (only for valid HTML responses)
         try:
-            # TODO: Commented out for now as it's not needed for now
-            # if not response.headers:
-            #     logger.warning(f"No headers for {response.url} (status: {response.status})")
-
             output = {
                 'url': response.url,
                 'status': response.status,
@@ -567,6 +567,10 @@ class DomainSpider(BaseSpider):
                 'domain': self.domain,
                 'crawl_strategy': 'sitemap' if self.sitemap_processed else 'bfs',
                 'sitemap_found_pages': self.sitemap_found_pages,
+                'project_id': self.project_id,
+                'cycle_id': self.cycle_id,
+                'use_proxy': self.use_proxy,
+                'use_js_rendering': self.use_js_rendering,
                 **self.custom_params
             }
 

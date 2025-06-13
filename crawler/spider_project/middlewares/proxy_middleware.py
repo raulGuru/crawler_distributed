@@ -44,15 +44,27 @@ class ProxyMiddleware:
 
         domain = request.url.split('/')[2]
 
-        # Check if domain requires proxy
-        if domain in self.domains_requiring_proxy:
+        # Check if proxy usage is forced for this request
+        force_proxy = request.meta.get('force_proxy', False)
+        use_proxy = request.meta.get('use_proxy', False)
+
+        # If proxy is forced or explicitly requested, always use proxy
+        if force_proxy or use_proxy or domain in self.domains_requiring_proxy:
             proxy = get_proxy_manager().get_proxy()
             if proxy:
-                logger.info(f"Using proxy {proxy} for {domain}")
+                if force_proxy:
+                    logger.info(f"Using forced proxy {proxy} for {domain}")
+                elif use_proxy:
+                    logger.info(f"Using requested proxy {proxy} for {domain}")
+                else:
+                    logger.info(f"Using proxy {proxy} for {domain}")
                 request.meta['proxy'] = proxy
                 request.meta['proxy_domain'] = domain
             else:
-                logger.warning(f"No proxy available for {domain}")
+                if force_proxy or use_proxy:
+                    logger.warning(f"No proxy available for forced/requested proxy usage on {domain}")
+                else:
+                    logger.warning(f"No proxy available for {domain}")
 
         return None
 
@@ -71,7 +83,7 @@ class ProxyMiddleware:
             return response
 
         # Handle proxy-related errors
-        if response.status in (403, 429):
+        if response.status in (403, 429, 502, 503, 504):
             self.domains_requiring_proxy.add(domain)
             if proxy:
                 get_proxy_manager().mark_banned(proxy)

@@ -89,8 +89,15 @@ class ParserTriggerPipeline:
             self.logger.info(f"Filled missing domain for {item.get('url', 'N/A')} → {item.get('domain', 'N/A')}")
 
         # Sanitize and convert item in one pass
+        item_copy = dict(item)
+        if 'cycle_id' in item_copy:
+            item_copy['cycle_id'] = int(item_copy['cycle_id'])
+        if 'use_proxy' in item_copy:
+            item_copy['use_proxy'] = bool(item_copy['use_proxy'])
+        if 'use_js_rendering' in item_copy:
+            item_copy['use_js_rendering'] = bool(item_copy['use_js_rendering'])
         base_parser_data = sanitize_and_convert({
-            **item,
+            **item_copy,
             'html_file_path': html_file_path
         })
 

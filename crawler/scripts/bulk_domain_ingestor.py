@@ -345,7 +345,7 @@ def bulk_ingest_domains_single_run(args, logger=None) -> int:
                     'single_url': domain_doc.get('single_url', DEFAULT_SINGLE_URL),
                     'use_sitemap': domain_doc.get('use_sitemap', DEFAULT_USE_SITEMAP),
                     'cycle_id': domain_doc.get('cycle_id', 0),
-                    'project_id': domain_doc.get('project_id', 0),
+                    'project_id': domain_doc.get('project_id', None),
                 }
                 # Add any custom parameters to job_data
                 custom_params_from_doc = domain_doc.get('custom_params', {})  # Expects a dict
@@ -376,7 +376,9 @@ def bulk_ingest_domains_single_run(args, logger=None) -> int:
                     'job_id': beanstalkd_job_id, # Beanstalkd job ID
                     'crawl_status': 'fresh',
                     'created_at': datetime.utcnow(),
-                    'updated_at': datetime.utcnow()
+                    'updated_at': datetime.utcnow(),
+                    'project_id': final_job_data.get('project_id'),  # Required ObjectId
+                    'cycle_id': int(final_job_data.get('cycle_id', 0)),  # Required int, default 0
                 }
 
                 insert_result_id = mongodb_client.insert_one(MONGO_CRAWL_JOB_COLLECTION, mongo_doc_payload)

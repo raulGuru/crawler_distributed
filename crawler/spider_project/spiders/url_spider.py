@@ -139,6 +139,10 @@ class URLSpider(BaseSpider):
             'crawl_id': self.crawl_id,
             'domain': self.domain,
             'crawl_strategy': 'bfs',
+            'project_id': self.project_id,
+            'cycle_id': self.cycle_id,
+            'use_proxy': self.use_proxy,  # Reflects actual usage
+            'use_js_rendering': self.use_js_rendering,  # Reflects actual usage
             **self.custom_params
         }
 

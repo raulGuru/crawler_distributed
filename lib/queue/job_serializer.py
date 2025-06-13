@@ -107,7 +107,7 @@ class JobSerializer:
                 required_fields.append('domain or url')
 
             # Check other required fields
-            for field in ['max_pages', 'single_url', 'use_sitemap']:
+            for field in ['max_pages', 'single_url', 'use_sitemap', 'project_id', 'cycle_id']:
                 if field not in job_data:
                     required_fields.append(field)
 

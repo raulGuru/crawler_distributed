@@ -26,12 +26,21 @@ class CrawlJobProcessor:
         use_sitemap_str = 'True' if job_data.get('use_sitemap') else 'False'
         spider_name = 'url_spider' if job_data.get('single_url') else 'domain_spider'
         max_pages = int(job_data.get('max_pages', 50))
+        project_id = job_data.get('project_id')
+        cycle_id = int(job_data.get('cycle_id', 0))
+        use_proxy = 'True' if bool(job_data.get('use_proxy', False)) else 'False'
+        use_js_rendering = 'True' if bool(job_data.get('use_js_rendering', False)) else 'False'
+
         cmd = [
             self.scrapy_path, 'crawl', spider_name,
             '-a', f"job_id={job_id}",
             '-a', f"max_pages={max_pages}",
             '-a', f"single_url={single_url_str}",
-            '-a', f"use_sitemap={use_sitemap_str}"
+            '-a', f"use_sitemap={use_sitemap_str}",
+            '-a', f"project_id={project_id}",
+            '-a', f"cycle_id={cycle_id}",
+            '-a', f"use_proxy={use_proxy}",
+            '-a', f"use_js_rendering={use_js_rendering}"
         ]
         if job_data.get('domain'):
             cmd.extend(['-a', f"domain={job_data['domain']}"])
@@ -39,7 +48,9 @@ class CrawlJobProcessor:
             cmd.extend(['-a', f"url={job_data['url']}"])
         if job_data.get('crawl_id'):
             cmd.extend(['-a', f"crawl_id={job_data['crawl_id']}"])
-        exclude_keys = {'job_id', 'max_pages', 'single_url', 'use_sitemap', 'domain', 'url', 'crawl_id'}
+
+        # exclude keys from job_data
+        exclude_keys = {'job_id', 'max_pages', 'single_url', 'use_sitemap', 'domain', 'url', 'crawl_id', 'project_id', 'cycle_id', 'use_proxy', 'use_js_rendering'}
         for key, value in job_data.items():
             if key not in exclude_keys and value is not None:
                 cmd.extend(['-a', f"{key}={value}"])
@@ -47,6 +58,8 @@ class CrawlJobProcessor:
             job_data.get('domain'), job_data['crawl_id']
         )
         cmd.extend(['--logfile', log_file])
+        job_data['scrapy_log_file'] = log_file
+
         return cmd
 
     def log_job_to_mongo(self, job_id: Any, job_data: Dict[str, Any], status: str, duration: float, stdout: str, stderr: str) -> None:
@@ -58,8 +71,8 @@ class CrawlJobProcessor:
             if crawl_id:
                 update_data = {
                     'job_id': job_id,
-                    # 'job_data': job_data,
                     'crawl_status': status,
+                    'scrapy_log_file': job_data.get('scrapy_log_file'),
                     'duration': duration,
                     'stdout': stdout,
                     'stderr': stderr,
