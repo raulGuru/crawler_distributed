@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from lib.utils.logging_utils import LoggingUtils
+from lib.utils.domain_health import check_domain_connectivity
 
 class CrawlJobProcessor:
     """
@@ -95,6 +96,33 @@ class CrawlJobProcessor:
         """
         self.logger.info(f"Processing job {job_id}")
         try:
+            domain = job_data.get('domain')
+            if domain:
+                health = check_domain_connectivity(domain)
+                self.logger.info(f"Domain health check for {domain}: {health}")
+                if not health.get('reachable'):
+                    update_data = {
+                        'job_id': job_id,
+                        'crawl_status': 'failed_health_check',
+                        'domain_health': health,
+                        'updated_at': datetime.utcnow(),
+                    }
+                    crawl_id = job_data.get('crawl_id')
+                    if crawl_id:
+                        self.mongodb_client.update_one(
+                            self.mongo_collection,
+                            {'crawl_id': crawl_id},
+                            {'$set': update_data},
+                        )
+                        self.logger.info(
+                            f"Domain unreachable for crawl_id {crawl_id}; updated status to failed_health_check"
+                        )
+                    else:
+                        self.logger.error(
+                            f"Cannot update MongoDB for job {job_id} without crawl_id"
+                        )
+                    return False
+
             cmd = self.build_scrapy_command(job_id, job_data)
             self.logger.info(f"Running Scrapy command: {' '.join(cmd)}")
             start_time = time.time()
