@@ -477,7 +477,7 @@ class BaseSpider(Spider):
             self.crawler.stats.set_value('proxy_used', self.stats['proxy_used'])
             self.crawler.stats.set_value('js_rendering_used', self.stats['js_rendering_used'])
 
-        logger.info(f"Spider closed ({reason}). Stats: {self.stats}")
+        # logger.info(f"Spider closed ({reason}). Stats: {self.stats}")
 
         # Log skipped URLs summary
         if self.stats['skipped_urls']:

@@ -43,18 +43,18 @@ ROTATE_USER_AGENT = True
 USER_AGENT_ROTATION_POLICY = 'per_request'  # 'per_domain', 'per_request', or 'per_crawl'
 
 # Concurrency settings
-CONCURRENT_REQUESTS = 4
-CONCURRENT_REQUESTS_PER_DOMAIN = 4
-CONCURRENT_REQUESTS_PER_IP = 0 # unlimited
+CONCURRENT_REQUESTS = 1
+CONCURRENT_REQUESTS_PER_DOMAIN = 2
+CONCURRENT_REQUESTS_PER_IP = 1
 
 # Request throttling
 AUTOTHROTTLE_ENABLED = True
-AUTOTHROTTLE_START_DELAY = 1
-AUTOTHROTTLE_MAX_DELAY = 30
+AUTOTHROTTLE_START_DELAY = 5
+AUTOTHROTTLE_MAX_DELAY = 60
 AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 AUTOTHROTTLE_DEBUG = False
-DOWNLOAD_DELAY = 1 # 1 second between requests
-DOWNLOAD_TIMEOUT = 30
+DOWNLOAD_DELAY = 5 # 5 second between requests
+DOWNLOAD_TIMEOUT = 40
 RANDOMIZE_DOWNLOAD_DELAY = True
 
 # Robots.txt handling
@@ -70,8 +70,8 @@ PROXY_BLACKLIST_TIME = 1800  # seconds (30 minutes)
 PROXY_LIST_PATH = str(PROJECT_ROOT / 'config/proxy_list.json')
 
 # Crawler behavior settings
-DEPTH_PRIORITY = 1
-DOMAIN_SPIDER_DEPTH_LIMIT = 10
+DEPTH_PRIORITY = 0
+DOMAIN_SPIDER_DEPTH_LIMIT = 1
 CLOSESPIDER_TIMEOUT = 900
 MAX_FAILED_PAGES = 20
 
@@ -108,13 +108,13 @@ TELNETCONSOLE_PORT = [6023, 6073]
 TELNETCONSOLE_HOST = '127.0.0.1'
 
 # Additional settings
-COOKIES_ENABLED = True
+COOKIES_ENABLED = False
 # COOKIES_DEBUG = False
 # REDIRECT_ENABLED = True
 # REDIRECT_MAX_TIMES = 5
 # AJAXCRAWL_ENABLED = True
 # COMPRESSION_ENABLED = True
-# REACTOR_THREADPOOL_MAXSIZE = 20
+REACTOR_THREADPOOL_MAXSIZE = 20
 # DNSCACHE_ENABLED = True
 # DNS_TIMEOUT = 10
 
@@ -138,8 +138,8 @@ RETRY_BACKOFF_FACTOR = 2  # exponential backoff
 if os.environ.get('CRAWLER_ENV') == 'production':
     LOG_LEVEL = 'WARNING'
     # AUTOTHROTTLE_DEBUG = False
-    CONCURRENT_REQUESTS = 4
-    CONCURRENT_REQUESTS_PER_DOMAIN = 4
+    CONCURRENT_REQUESTS = 1
+    CONCURRENT_REQUESTS_PER_DOMAIN = 2
     MAX_PAGES = 25
     DOMAIN_SPIDER_CONCURRENT_REQUESTS = DOMAIN_SPIDER_CONCURRENT_REQUESTS
     DOMAIN_SPIDER_CONCURRENT_REQUESTS_PER_DOMAIN = DOMAIN_SPIDER_CONCURRENT_REQUESTS_PER_DOMAIN
@@ -147,8 +147,8 @@ if os.environ.get('CRAWLER_ENV') == 'production':
 elif os.environ.get('CRAWLER_ENV') == 'development':
     LOG_LEVEL = 'DEBUG'
     # AUTOTHROTTLE_DEBUG = True
-    CONCURRENT_REQUESTS = 4
-    CONCURRENT_REQUESTS_PER_DOMAIN = 4
+    CONCURRENT_REQUESTS = 1
+    CONCURRENT_REQUESTS_PER_DOMAIN = 2
     MAX_PAGES = 25
     DOMAIN_SPIDER_CONCURRENT_REQUESTS = DOMAIN_SPIDER_CONCURRENT_REQUESTS
     DOMAIN_SPIDER_CONCURRENT_REQUESTS_PER_DOMAIN = DOMAIN_SPIDER_CONCURRENT_REQUESTS_PER_DOMAIN
@@ -161,6 +161,12 @@ ALLOWED_CONTENT_TYPES = [
     'application/xml',
     'text/xml',
 ]
+
+# Default request headers
+DEFAULT_REQUEST_HEADERS = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
 
 # File extensions to skip
 SKIPPED_EXTENSIONS = [
@@ -182,7 +188,7 @@ DOWNLOADER_MIDDLEWARES = {
     'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
     'crawler.spider_project.middlewares.user_agent_middleware.UserAgentMiddleware': 400,
     'scrapy.downloadermiddlewares.offsite.OffsiteMiddleware': 500,
-    'crawler.spider_project.middlewares.retry_middleware.RetryMiddleware': 550,
+    # 'crawler.spider_project.middlewares.retry_middleware.RetryMiddleware': 550,
     'crawler.spider_project.middlewares.proxy_middleware.ProxyMiddleware': 560,
     'crawler.spider_project.middlewares.content_filter_middleware.ContentFilterMiddleware': 580,
     'crawler.spider_project.middlewares.js_rendering_middleware.JSRenderingMiddleware': 590,
@@ -280,7 +286,7 @@ DOMAIN_SPIDER_SETTINGS = {
     'CONCURRENT_REQUESTS_PER_DOMAIN': CONCURRENT_REQUESTS_PER_DOMAIN,
     'SCHEDULER_MEMORY_QUEUE': 'scrapy.squeues.FifoMemoryQueue',
     'SCHEDULER_DISK_QUEUE': 'scrapy.squeues.PickleFifoDiskQueue',
-    'SCHEDULER_PRIORITY_QUEUE': 'scrapy.pqueues.ScrapyPriorityQueue',
+    # 'SCHEDULER_PRIORITY_QUEUE': 'scrapy.pqueues.FifoQueue',
 }
 
 # URL spider settings
