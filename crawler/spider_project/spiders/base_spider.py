@@ -192,26 +192,38 @@ class BaseSpider(Spider):
 
         meta = kwargs.pop('meta', {})
 
-        # If this is the first request and explicit values were set, force them
-        if not meta.get('retry_count', 0):  # First request (not a retry)
+        # Determine starting stage if not already provided
+        if 'strategy_stage' not in meta:
+            if self.use_js_rendering:
+                meta['strategy_stage'] = 'js_proxy'
+                meta['attempt_count'] = 1
+                meta.setdefault('use_proxy', True)
+                meta.setdefault('js_render', True)
+            elif self.use_proxy:
+                meta['strategy_stage'] = 'proxy'
+                meta['attempt_count'] = 1
+                meta.setdefault('use_proxy', True)
+            else:
+                meta['strategy_stage'] = 'direct'
+                meta['attempt_count'] = 1
+
+            # If this is the very first request and explicit values were set, force them
             if self.explicit_proxy_from_start:
                 meta['use_proxy'] = True
-                meta['force_proxy'] = True  # Signal to middleware to force proxy usage
+                meta['force_proxy'] = True
                 logger.info(f"Forcing proxy usage from start for {url} (explicitly requested)")
 
             if self.explicit_js_rendering_from_start:
                 meta['js_render'] = True
-                meta['force_js_render'] = True  # Signal to middleware to force JS rendering
+                meta['force_js_render'] = True
                 logger.info(f"Forcing JS rendering from start for {url} (explicitly requested)")
 
-        # Update meta with current strategy (for retries and normal flow)
+        # Update meta with identifiers and current flags
         meta.update({
             'job_id': self.job_id,
-            'crawl_id': self.crawl_id,  # Include crawl_id in meta
-            'max_retries': 2,  # Allow 2 retries with different strategies
-            'use_proxy': self.use_proxy,
-            'js_render': self.use_js_rendering,
-            # 'handle_httpstatus_list': [403, 404, 429, 500, 502, 503, 504],  # Handle these statuses in errback
+            'crawl_id': self.crawl_id,
+            'use_proxy': meta.get('use_proxy', False),
+            'js_render': meta.get('js_render', False),
         })
 
         return Request(
@@ -224,134 +236,89 @@ class BaseSpider(Spider):
         )
 
     def handle_error(self, failure):
-        """
-        Handle failed requests by trying different crawling strategies.
-
-        The progression depends on initial parameters:
-        - If use_proxy=True was explicitly set: Always use proxy, escalate to proxy+JS on failure
-        - If use_js_rendering=True was explicitly set: Always use JS rendering, try proxy+JS on failure
-        - If neither was explicitly set: 1. Direct crawl -> 2. Proxy crawl -> 3. JS rendering
-        - If both were explicitly set: Use both from start, no escalation
-
-        Args:
-            failure: The failure details
-        """
+        """Handle failed requests using staged retry logic."""
         request = failure.request
         url = request.url
 
-        # Check if URL has skipped extension - if so, add to skipped list and don't retry
+        # Skip retry for ignored extensions
         if has_skipped_extension(url):
             logger.warning(f"URL has skipped extension: {url}")
-
-            # Track in stats
             self.stats['pages_skipped'] += 1
             if url not in self.stats['skipped_urls']:
                 self.stats['skipped_urls'].append(url)
-
-            # Update crawler stats
             if hasattr(self, 'crawler') and hasattr(self.crawler, 'stats'):
                 self.crawler.stats.inc_value('pages_skipped')
-
-            # Don't log this as an error
             return None
 
-        # Continue with normal error handling for non-skipped URLs
-        retries = request.meta.get('max_retries', 0)
+        stage = request.meta.get('strategy_stage', 'direct')
+        attempt = request.meta.get('attempt_count', 1)
         domain = normalize_domain(urlparse(url).netloc)
 
-        logger.warning(f"Request failed for {url}: {failure.value}")
-        # Use the crawler stats object instead of the dict
+        logger.warning(f"Request failed at stage {stage} attempt {attempt} for {url}: {failure.value}")
+
         if hasattr(self, 'crawler') and hasattr(self.crawler, 'stats'):
             self.crawler.stats.inc_value('pages_failed')
         else:
             self.stats['pages_failed'] += 1
 
-        # Try fallback strategies if retries remain
-        if retries > 0:
-            new_meta = dict(request.meta)
-            new_meta['max_retries'] = retries - 1
+        new_meta = dict(request.meta)
 
-            # Strategy 1: If both proxy and JS rendering were explicitly set from start,
-            # no escalation possible - just retry with same settings
-            if self.explicit_proxy_from_start and self.explicit_js_rendering_from_start:
-                logger.info(f"Both proxy and JS rendering were explicitly enabled from start for {domain}, retrying with same settings")
-                new_meta['use_proxy'] = True
-                new_meta['js_render'] = True
-                return self.make_request(url, meta=new_meta, dont_filter=True)
+        if stage == 'direct':
+            logger.info(f"Direct crawl failed for {domain}, switching to proxy")
+            new_meta.update({
+                'strategy_stage': 'proxy',
+                'attempt_count': 1,
+                'use_proxy': True,
+                'js_render': False,
+            })
+            self.use_proxy = True
+            self.stats['proxy_used'] = True
+            return self.make_request(url, meta=new_meta, dont_filter=True)
 
-            # Strategy 2: If only proxy was explicitly set from start, escalate to proxy+JS
-            elif self.explicit_proxy_from_start and not self.explicit_js_rendering_from_start:
-                if not self.use_js_rendering:
-                    logger.info(f"Proxy was explicitly enabled from start for {domain}, escalating to proxy + JS rendering")
-                    self.use_js_rendering = True
-                    self.stats['js_rendering_used'] = True
-                    new_meta['use_proxy'] = True
-                    new_meta['js_render'] = True
-                    return self.make_request(url, meta=new_meta, dont_filter=True)
-                else:
-                    logger.info(f"Proxy and JS rendering already enabled for {domain}, retrying with same settings")
-                    new_meta['use_proxy'] = True
-                    new_meta['js_render'] = True
-                    return self.make_request(url, meta=new_meta, dont_filter=True)
+        elif stage == 'proxy' and attempt < 3:
+            logger.info(f"Proxy attempt {attempt} failed for {domain}, retrying with new proxy")
+            new_meta.update({
+                'strategy_stage': 'proxy',
+                'attempt_count': attempt + 1,
+                'use_proxy': True,
+                'js_render': False,
+            })
+            self.use_proxy = True
+            self.stats['proxy_used'] = True
+            return self.make_request(url, meta=new_meta, dont_filter=True)
 
-            # Strategy 3: If only JS rendering was explicitly set from start, escalate to proxy+JS
-            elif not self.explicit_proxy_from_start and self.explicit_js_rendering_from_start:
-                if not self.use_proxy:
-                    logger.info(f"JS rendering was explicitly enabled from start for {domain}, escalating to proxy + JS rendering")
-                    self.use_proxy = True
-                    self.stats['proxy_used'] = True
-                    new_meta['use_proxy'] = True
-                    new_meta['js_render'] = True
-                    return self.make_request(url, meta=new_meta, dont_filter=True)
-                else:
-                    logger.info(f"Proxy and JS rendering already enabled for {domain}, retrying with same settings")
-                    new_meta['use_proxy'] = True
-                    new_meta['js_render'] = True
-                    return self.make_request(url, meta=new_meta, dont_filter=True)
+        elif stage == 'proxy' and attempt == 3:
+            logger.info(f"Proxy attempts exhausted for {domain}, switching to proxy + JS rendering")
+            new_meta.update({
+                'strategy_stage': 'js_proxy',
+                'attempt_count': 1,
+                'use_proxy': True,
+                'js_render': True,
+            })
+            self.use_proxy = True
+            self.use_js_rendering = True
+            self.stats['proxy_used'] = True
+            self.stats['js_rendering_used'] = True
+            return self.make_request(url, meta=new_meta, dont_filter=True)
 
-            # Strategy 4: Default fallback behavior (neither was explicitly set to True)
-            else:
-                if not self.use_proxy and not self.use_js_rendering:
-                    # Direct crawl failed, try with proxy
-                    logger.info(f"Direct crawl failed for {domain}, switching to proxy")
-                    self.use_proxy = True
-                    self.stats['proxy_used'] = True
-                    new_meta['use_proxy'] = True
-                    new_meta['js_render'] = False
-                    return self.make_request(url, meta=new_meta, dont_filter=True)
+        elif stage == 'js_proxy' and attempt < 3:
+            logger.info(f"JS proxy attempt {attempt} failed for {domain}, retrying with new proxy")
+            new_meta.update({
+                'strategy_stage': 'js_proxy',
+                'attempt_count': attempt + 1,
+                'use_proxy': True,
+                'js_render': True,
+            })
+            self.use_proxy = True
+            self.use_js_rendering = True
+            self.stats['proxy_used'] = True
+            self.stats['js_rendering_used'] = True
+            return self.make_request(url, meta=new_meta, dont_filter=True)
 
-                elif self.use_proxy and not self.use_js_rendering:
-                    # Proxy crawl failed, try with JS rendering
-                    logger.info(f"Proxy crawl failed for {domain}, switching to JS rendering")
-                    self.use_js_rendering = True
-                    self.stats['js_rendering_used'] = True
-                    new_meta['js_render'] = True
-                    return self.make_request(url, meta=new_meta, dont_filter=True)
-
-        # If all strategies failed, check if the page is JS-heavy and force JS rendering for the domain
-        # Only do this for the homepage/index or first page
-        if hasattr(self, 'force_js_render') and hasattr(request, 'url'):
-            # Try to get the response from failure if available
-            response = getattr(failure, 'value', None)
-            if response and hasattr(response, 'text'):
-                if self._is_js_heavy_response(response):
-                    logger.info(f"Detected JS-heavy homepage for {domain}, enabling JS rendering for domain.")
-                    self.force_js_render(domain)
-                    # Retry with JS rendering
-                    new_meta = dict(request.meta)
-                    new_meta['js_render'] = True
-                    new_meta['max_retries'] = 0  # Avoid infinite loop
-                    return self.make_request(url, meta=new_meta, dont_filter=True)
-
-        logger.error(f"All crawling strategies failed for {url}")
-
-        # Check if too many pages have failed, and stop the crawl if so
-        failed_count = 0
-        if hasattr(self, 'crawler') and hasattr(self.crawler, 'stats'):
-            failed_count = self.crawler.stats.get_value('pages_failed', 0)
         else:
-            failed_count = self.stats.get('pages_failed', 0)
+            logger.error(f"All crawling strategies failed for {url}")
 
+        failed_count = self.crawler.stats.get_value('pages_failed', 0) if hasattr(self, 'crawler') and hasattr(self.crawler, 'stats') else self.stats.get('pages_failed', 0)
         max_failed_pages = getattr(self, 'settings', {}).get('MAX_FAILED_PAGES', 20)
         if failed_count >= max_failed_pages:
             logger.error(f"Too many failed pages ({failed_count}), stopping crawl for manual intervention.")
