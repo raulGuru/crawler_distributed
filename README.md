@@ -26,6 +26,8 @@ A scalable, modular, distributed web crawler system. Handles large-scale domain 
 4. **Parser Workers**: Specialized workers extract data from HTML (see `parser/workers/`)
 5. **Monitor Worker**: Monitors queue, system health, logs metrics
 6. **Integration Service**: Orchestrates all workers, restarts on failure, health checks
+7. **Health-Check Step**: Periodic system checks are executed by the integration
+   service. Results are saved to `data/logs/health_checks` for troubleshooting.
 
 **Key Components:**
 - `workers/integration_service.py`: Orchestrates all workers, health checks, restarts
@@ -95,6 +97,28 @@ Job status script details: `scripts/README.md`
 ### Configuration
 - `.env`: Main config (copied from `env.example`)
 - `config/`: Python config files (settings, logging, proxies)
+
+### Domain Configuration
+Per-domain settings such as `use_proxy` and `use_js_rendering` are stored in
+MongoDB. When a new job is created for a domain, these flags are applied so
+subsequent crawls continue with the learned strategy. Use the job submission
+script to override them if needed:
+
+```bash
+python scripts/submit_crawl_job.py --domain example.com --use-proxy --use-js-rendering
+```
+This overrides any stored configuration for that run.
+
+### Retry Strategy
+Each request is attempted up to three times. The spider escalates through these
+stages:
+
+1. Direct fetch without extras
+2. Retry with a proxy
+3. Retry with proxy and JavaScript rendering
+
+If all strategies fail the job is marked failed and may be buried by the queue
+manager.
 
 ---
 
