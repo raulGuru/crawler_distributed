@@ -150,7 +150,7 @@ class JSRenderingMiddleware:
         self.playwright_timeout = playwright_timeout
 
         # Keep track of domains that need JS rendering
-        self.js_required_domains = self._load_js_domains()
+        self.js_required_domains = set()  # Empty, DB will handle pre-config
         self.domain_needs_js = defaultdict(int)  # Domain -> count of detections
         self.rendered_urls = set()
         self.rendering_errors = defaultdict(int)  # Domain -> count of rendering errors
@@ -196,9 +196,6 @@ class JSRenderingMiddleware:
         Args:
             spider: Scrapy spider
         """
-        # Save domains that required JS rendering
-        self._save_js_domains()
-
         # Log final statistics
         logger.info(f"JS Rendering Statistics:")
         logger.info(f"- Domains requiring JS: {len(self.stats['domains_requiring_js'])}")
@@ -230,8 +227,10 @@ class JSRenderingMiddleware:
         # Get domain
         domain = self._get_domain(request.url)
 
-        # If domain is confirmed as requiring JS rendering, always use JS rendering (skip proxy check)
-        if self.js_required(domain):
+        # Check for forced JS rendering (always apply immediately)
+        force_js_render = request.meta.get('force_js_render', False) or request.meta.get('js_render', False)
+        if force_js_render:
+            logger.info(f"Applying JS rendering for <{request.url}> as requested by spider strategy.")
             # Set a flag in the spider for stats collection
             if hasattr(spider, 'js_rendering_domains'):
                 spider.js_rendering_domains.add(domain)
@@ -239,20 +238,29 @@ class JSRenderingMiddleware:
                 spider.js_rendering_domains = set([domain])
             return self._apply_renderer(request, domain, spider)
 
-        # If JS rendering is forced for this request, also set the flag
-        if request.meta.get('force_js_render'):
+        # Check if domain is confirmed as requiring JS rendering from previous analysis
+        if self.js_required(domain):
+            logger.debug(f"Domain {domain} known to require JS rendering, applying renderer")
+            # Set a flag in the spider for stats collection
             if hasattr(spider, 'js_rendering_domains'):
                 spider.js_rendering_domains.add(domain)
             else:
                 spider.js_rendering_domains = set([domain])
             return self._apply_renderer(request, domain, spider)
 
-        # Otherwise, normal logic: try proxy first, then JS rendering if needed
-        if not request.meta.get('proxy') and not request.meta.get('proxy_tried'):
-            logger.debug(f"Trying proxy before JS rendering for {domain}")
-            request.meta['proxy_tried'] = True
-            return None
+        # This indicates the spider was configured with use_js_rendering=True from database learnings
+        js_render_requested = request.meta.get('js_render', False)
+        if js_render_requested and hasattr(spider, 'explicit_js_rendering_from_start') and spider.explicit_js_rendering_from_start:
+            logger.info(f"JS rendering requested from db for {domain}, applying renderer")
+            # Set a flag in the spider for stats collection
+            if hasattr(spider, 'js_rendering_domains'):
+                spider.js_rendering_domains.add(domain)
+            else:
+                spider.js_rendering_domains = set([domain])
+            return self._apply_renderer(request, domain, spider)
 
+        # For new domains or first-time requests, let the request proceed normally to get analyzed first
+        # The process_response method will handle JS rendering after analyzing the response
         return None
 
     def process_response(self, request, response, spider):
@@ -290,14 +298,8 @@ class JSRenderingMiddleware:
                 self.js_required_domains.discard(domain)
                 return response
 
-        # Skip analysis if this domain is already known to require JS rendering
+        # Check if this domain is already known to require JS rendering
         if self.js_required(domain):
-            # Check if we should try proxy first
-            if not request.meta.get('proxy') and not request.meta.get('proxy_tried'):
-                logger.debug(f"Trying proxy before JS rendering for {domain}")
-                request.meta['proxy_tried'] = True
-                return response
-
             # Render this response
             rendered_request = self._apply_renderer(request, domain, spider)
             if rendered_request:
@@ -305,12 +307,30 @@ class JSRenderingMiddleware:
                 return rendered_request
             return response
 
-        # Analyze the response to detect if JS rendering is needed
+        # Check if JS rendering was requested (but not from previous learnings)
+        # This could be from retry logic or manual request
+        js_render_requested = request.meta.get('js_render', False)
+        explicit_from_start = hasattr(spider, 'explicit_js_rendering_from_start') and spider.explicit_js_rendering_from_start
+
+        # If js_render=True but NOT from previous learnings, apply rendering
+        if js_render_requested and not explicit_from_start:
+            logger.info(f"JS rendering requested (retry/manual) for {domain}, applying renderer")
+            rendered_request = self._apply_renderer(request, domain, spider)
+            if rendered_request:
+                logger.debug(f"Re-fetching with JS rendering: {request.url}")
+                return rendered_request
+            return response
+
+        # Analyze the response to detect if JS rendering is needed for new domains
         self.stats['responses_analyzed'] += 1
         if hasattr(spider.crawler.stats, 'inc_value'):
             spider.crawler.stats.inc_value('js_rendering/responses_analyzed')
 
-        if self._needs_js_rendering(response):
+        needs_js = self._needs_js_rendering(response)
+
+        # Apply JS rendering if analysis detects it's needed
+        if needs_js:
+            logger.info(f"Analysis detected JS rendering needed for {domain}")
             # This page needs JS rendering
             self.stats['js_rendering_detected'] += 1
             if hasattr(spider.crawler.stats, 'inc_value'):
@@ -326,12 +346,6 @@ class JSRenderingMiddleware:
                 self.stats['domains_requiring_js'].add(domain)
                 if hasattr(spider.crawler.stats, 'inc_value'):
                     spider.crawler.stats.inc_value('js_rendering/domains_requiring_js')
-
-            # Check if we should try proxy first
-            if not request.meta.get('proxy') and not request.meta.get('proxy_tried'):
-                logger.debug(f"Trying proxy before JS rendering for {domain}")
-                request.meta['proxy_tried'] = True
-                return response
 
             # Render this response
             rendered_request = self._apply_renderer(request, domain, spider)
