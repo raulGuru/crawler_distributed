@@ -5,6 +5,7 @@ from pymongo import MongoClient
 from scrapy import Spider
 from urllib.parse import urlparse
 from config.base_settings import MONGO_CRAWL_JOB_COLLECTION
+from lib.utils.domain_config_manager import update_domain_config
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,16 @@ class StatsPipeline:
             # Close MongoDB connection
             if self.mongo_client is not None:
                 self.mongo_client.close()
+
+            # Persist learned crawling strategy for this domain
+            try:
+                update_domain_config(
+                    spider.domain,
+                    use_proxy=spider.stats.get('proxy_used'),
+                    use_js_rendering=spider.stats.get('js_rendering_used')
+                )
+            except Exception as e:
+                logger.error(f"Failed to update domain config for {spider.domain}: {e}")
         except Exception as e:
             logger.error(f"Error closing spider stats: {str(e)}")
 

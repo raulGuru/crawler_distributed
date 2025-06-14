@@ -15,6 +15,7 @@ from scrapy.exceptions import CloseSpider, IgnoreRequest
 from scrapy.crawler import Crawler
 
 from ..utils.url_utils import has_skipped_extension, normalize_domain
+from lib.utils.domain_config_manager import update_domain_config
 
 logger = logging.getLogger(__name__)
 
@@ -482,3 +483,13 @@ class BaseSpider(Spider):
         # Log skipped URLs summary
         if self.stats['skipped_urls']:
             logger.info(f"Skipped {len(self.stats['skipped_urls'])} URLs with ignored extensions")
+
+        # Persist learned crawling strategy for this domain
+        try:
+            update_domain_config(
+                self.domain,
+                use_proxy=self.stats.get('proxy_used'),
+                use_js_rendering=self.stats.get('js_rendering_used')
+            )
+        except Exception as e:
+            logger.error(f"Failed to update domain config for {self.domain}: {e}")
