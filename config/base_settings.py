@@ -28,6 +28,7 @@ CRAWL_JOB_LISTENERS_DIR = os.path.join(LOG_DIR, 'crawl_job_listeners')
 SCRAPY_LOGS_DIR = os.path.join(LOG_DIR, 'scrapy_logs')
 PARSER_WORKERS_DIR = os.path.join(LOG_DIR, 'parser_workers')
 HEALTH_CHECKS_DIR = os.path.join(LOG_DIR, 'health_checks')
+DOMAIN_CONFIG_FILE = os.path.join(DATA_DIR, 'domain_config.json')
 
 # Create directories if they don't exist
 for directory in [DATA_DIR, HTML_DIR, LOG_DIR, INTEGRATION_SERVICE_LOG_DIR, SUBMIT_CRAWL_JOBS_DIR, PARSER_WORKERS_DIR, CRAWL_JOB_LISTENERS_DIR, HEALTH_CHECKS_DIR, SCRAPY_LOGS_DIR]:
